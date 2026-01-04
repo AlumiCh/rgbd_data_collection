@@ -1,0 +1,300 @@
+import logging
+from collections import defaultdict
+from enum import Enum, auto
+from functools import partial
+from logging import getLogger
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
+from pydantic import BaseModel
+from transitions import EventData
+from transitions.extensions import LockedMachine
+
+from airbot_data_collection.utils import StrEnum
+
+State = Optional[Union[str, Enum, dict]]
+Action = Union[str, Enum]
+
+
+class LogLevel(StrEnum):
+    debug = auto()
+    info = auto()
+    warning = auto()
+    error = auto()
+    critical = auto()
+
+    @classmethod
+    def get(cls, level: str):
+        return {
+            "debug": logging.DEBUG,
+            "info": logging.INFO,
+            "warning": logging.WARNING,
+            "error": logging.ERROR,
+            "critical": logging.CRITICAL,
+        }[level]
+
+
+SMCallable = Optional[Union[Callable, str, List[Union[Callable, str]]]]
+
+
+class ToDestConfig(BaseModel):
+    dest: State
+    conditions: SMCallable = None
+    unless: SMCallable = None
+    before: SMCallable = None
+    after: SMCallable = None
+    prepare: SMCallable = None
+
+
+ActionTransitions = Dict[Union[State, Tuple[State, ...]], List[ToDestConfig]]
+SourceTransitions = Dict[Action, List[ToDestConfig]]
+
+
+class StateMachineConfig(BaseModel):
+    states: list[State] = []
+    initial: State = None
+    # The action transitions will be added first, then the source transitions.
+    action_transitions: dict[Action, ActionTransitions] = {}
+    # The source transitions will be added after the action transitions.
+    # Usually, this is used for the error source state.
+    source_transitions: dict[State, SourceTransitions] = {}
+    # when True, any calls to trigger methods
+    # that are not valid for the present state (e.g., calling an
+    # a_to_b() trigger when the current state is c) will be silently
+    # ignored rather than raising an invalid transition exception.
+    ignore_invalid_triggers: bool = True
+    # If a name is set, it will be used as a prefix for logger output
+    name: Optional[str] = None
+    # # When True, processes transitions sequentially. A trigger
+    # # executed in a state callback function will be queued and executed later.
+    # # Due to the nature of the queued processing, all transitions will
+    # # _always_ return True since conditional checks cannot be conducted at queueing time.
+    # queued: bool = False
+    # A callable called on for each triggered event after transitions have been processed.
+    # This is also called when a transition raises an exception.
+    finalize_event: SMCallable = None
+    log_level: LogLevel = LogLevel.warning
+    # # A callable called on for before possible transitions will be processed.
+    # # It receives the very same args as normal callbacks.
+    # prepare_event: Callable = None
+    # # A callable called when an event raises an exception. If not set,
+    # # the exception will be raised instead.
+    # on_exception: Callable = None
+    # # When True, any arguments passed to trigger
+    # # methods will be wrapped in an EventData object, allowing
+    # # indirect and encapsulated access to data. When False, all
+    # # positional and keyword arguments will be passed directly to all
+    # # callback methods.
+    # send_event: bool = True
+
+
+class StateMachineBasis:
+    def __init__(self, config: StateMachineConfig):
+        getLogger("transitions").setLevel(LogLevel.get(config.log_level))
+        self.machine = LockedMachine(
+            self,
+            before_state_change=self.before_state_change,
+            prepare_event=self.prepare_event,
+            on_exception=self.on_exception,
+            queued=False,
+            send_event=True,
+            # finalize_event=
+            **config.model_dump(
+                exclude={"action_transitions", "source_transitions", "log_level"}
+            ),
+        )
+        self._action_result: dict[str, bool] = {}
+        self._last_state = self.get_state()
+        self._last_action = None
+        self._action_calls_raw: dict[Action, Callable] = {}
+        self._action_calls: dict[str, Callable] = {}
+        self.add_action_transitions(config.action_transitions)
+        self.add_source_transitions(config.source_transitions or {})
+
+    def get_logger(self):
+        return getLogger("transitions").getChild(self.__class__.__name__)
+
+    def add_action_transitions(
+        self, action_transitions: dict[Action, ActionTransitions]
+    ):
+        """Add all transitions of an action.
+        The order of the ToDestConfig is important.
+        """
+        for action, transitions in action_transitions.items():
+            action_name = self.get_action_name(action)
+            for source, to_dests in transitions.items():
+                for index, to_dest in enumerate(to_dests):
+                    if to_dest.conditions is None:
+                        success_index = index
+                        break
+                if success_index == len(to_dests) - 1:
+                    # if the last transition is success, do not add failure
+                    failure = None
+                else:
+                    failure = to_dests[-1]
+                self.add_action_source_transitions(
+                    action_name,
+                    source,
+                    success=to_dests[success_index],
+                    failure=failure,
+                    not_only_success=to_dests[:success_index],
+                    not_only_failure=to_dests[success_index + 1 : -1],
+                )
+
+    def add_source_transitions(
+        self, source_transitions: dict[State, SourceTransitions]
+    ):
+        action_transitions = defaultdict(dict)
+        for source, transitions in source_transitions.items():
+            for action, todests in transitions.items():
+                action_transitions[action][source] = todests
+        return self.add_action_transitions(action_transitions)
+
+    def add_action_source_transitions(
+        self,
+        action: Action,
+        source: State,
+        success: ToDestConfig,
+        failure: ToDestConfig,
+        not_only_success: Optional[list[ToDestConfig]] = None,
+        not_only_failure: Optional[list[ToDestConfig]] = None,
+    ):
+        action_name = self.get_action_name(action)
+        assert not self.is_action_source_added(action_name, source)
+        self._add_action_source_transitions(
+            action_name, source, success, not_only_success, "success"
+        )
+        self._add_action_source_transitions(
+            action_name, source, failure, not_only_failure, "failure"
+        )
+
+    def _add_action_source_transitions(
+        self,
+        action_name: str,
+        source: State,
+        only: ToDestConfig,
+        not_only: Optional[list[ToDestConfig]] = None,
+        kind: str = "success",
+    ):
+        not_only = not_only or []
+        if only:
+            exclude_fields = ["conditions", "unless"]
+            for field in exclude_fields:
+                assert getattr(only, field) is None, f"{field} should be None"
+        args = (f"t_{action_name}", source)
+        self._add_not_only_transitions(action_name, source, not_only, kind)
+        cond_mapping = {
+            "success": "conditions",
+            "failure": "unless",
+        }
+        if only:
+            self.machine.add_transition(
+                *args,
+                **only.model_dump(exclude=exclude_fields),
+                **{cond_mapping[kind]: self.is_action_success},
+            )
+
+    def _add_not_only_transitions(
+        self, action: str, source: State, to_dests: list[ToDestConfig], kind: str
+    ):
+        if kind == "success":
+            cond = "conditions"
+        elif kind == "failure":
+            cond = "unless"
+        for to_dest in to_dests:
+            to_dest_dict = to_dest.model_dump()
+            if to_dest_dict.get(cond) is None:
+                to_dest[cond] = []
+            to_dest[cond].insert(0, self.is_action_success)
+            self.machine.add_transition(
+                f"t_{action}",
+                source,
+                **to_dest.model_dump(),
+            )
+
+    def is_action_source_added(
+        self, action: str, source: Union[State, tuple[State]]
+    ) -> bool:
+        """Check if the action source is added."""
+        if not isinstance(source, tuple):
+            source = (source,)
+        for src in source:
+            if self.machine.get_transitions(f"t_{self.get_action_name(action)}", src):
+                # self.get_logger().error(
+                #     f"Action {action} source {source} is already added."
+                # )
+                return True
+        return False
+
+    def get_action_name(self, action: Action) -> str:
+        if isinstance(action, Enum):
+            return action.name
+        elif isinstance(action, str):
+            return action
+        elif isinstance(action, partial):
+            return action.func.__name__
+        else:
+            return action.__name__
+
+    def get_state(self) -> str:
+        return self.state
+
+    def act(self, action: Action) -> bool:
+        """Act the action and return the result."""
+        if not self.trigger(f"t_{self.get_action_name(action)}"):
+            self.get_logger().warning(f"Action failed: {action}")
+            return False
+        return True
+
+    def prepare_event(self, event_data: EventData):
+        """Prepare the action."""
+        action = self._get_action_from_event(event_data)
+        self.get_logger().info(
+            f"Executing action: {action} in state: {self.get_state()}"
+        )
+        self._action_result[action] = self._call_action(action)
+        self._last_action = action
+
+    def before_state_change(self, event_data: EventData):
+        """Prepare the state."""
+        self._last_state = self.get_state()
+
+    def _get_action_from_event(self, event_data: EventData) -> str:
+        return event_data.event.name.removeprefix("t_")
+
+    def _call_action(self, action: str) -> Any:
+        """Call the action."""
+        if action in self._action_calls:
+            return self._action_calls[action]()
+        else:
+            return getattr(self, action)()
+
+    def is_action_success(self, event_data: EventData) -> bool:
+        """Check if the action is success."""
+        return bool(self._action_result[self._get_action_from_event(event_data)])
+
+    def get_last_action(self) -> str:
+        """Get the last action."""
+        return self._last_action
+
+    def get_last_action_result(self) -> Any:
+        """Get the last action result."""
+        return self._action_result[self._last_action]
+
+    def on_exception(self, event_data: EventData) -> None:
+        self.get_logger().exception(f"{event_data}")
+
+    # def finalize_event(self, event_data: EventData) -> None:
+    #     """Finalize the event."""
+    #     self.get_logger().debug(f"{event_data}")
+
+    @property
+    def action_calls(self) -> dict[Action, Callable]:
+        """Get the action calls."""
+        return self._action_calls_raw
+
+    @action_calls.setter
+    def action_calls(self, action_calls: dict[Action, Callable]):
+        """Set the action calls."""
+        self._action_calls_raw = action_calls
+        for action, func in action_calls.items():
+            self._action_calls[self.get_action_name(action)] = func

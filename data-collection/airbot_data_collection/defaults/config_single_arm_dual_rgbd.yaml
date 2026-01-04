@@ -1,0 +1,206 @@
+# ========================================
+# 单臂双RGBD相机数据采集配置文件
+# 用途: 单个机械臂 + 两个D435i相机进行抓取数据采集
+# 创建日期: 2026-01-04
+# ========================================
+
+# 数据保存模式: none表示同步保存（不使用并发）
+concurrent_save: none
+
+# 数据集目录配置
+dataset:
+  directory: single_arm_rgbd_data  # 数据保存目录
+
+# 演示器配置
+demonstrator:
+  name: grouped
+  param:
+    _target_: airbot_data_collection.demonstrate.demonstrators.grouped.GroupedDemonstrator
+    
+    # 自动控制配置
+    auto_control:
+      groups: []  # 不使用自动控制组
+      modes:
+      - process
+      rates:
+      - 100
+    
+    # 组件配置：机械臂 + 两个RGBD相机
+    components:
+      # ===== 组别定义 =====
+      # 'arm' - 机械臂组
+      # '/' - 相机1（独立组）
+      # '/' - 相机2（独立组）
+      groups: 
+      - arm           # 机械臂
+      - /             # 正面俯视相机（独立）
+      - /             # 侧面相机（独立）
+      
+      # ===== 组件名称 =====
+      names:
+      - arm_follower          # 机械臂名称
+      - camera_front_top      # 正面俯视相机
+      - camera_side           # 侧面相机
+      
+      # ===== 组件参数配置 =====
+      params:
+      # --- 机械臂参数 ---
+      - port: 50051  # 机械臂通信端口
+        # 如需指定IP，添加: ip: "localhost" 或 ip: "192.168.1.100"
+      
+      # --- 正面俯视D435i相机参数 ---
+      - camera_index: "YOUR_CAMERA_SERIAL_NUMBER_1"  # TODO: 替换为实际序列号
+        enable_color: true       # 启用RGB图像
+        enable_depth: true       # 启用深度图像
+        align_depth: true        # 将深度图对齐到RGB图
+        width: 640              # 图像宽度
+        height: 480             # 图像高度
+        fps: 30                 # 帧率
+        color_mode: "rgb"       # 颜色模式
+        force_hardware_reset: true  # 强制硬件重置
+      
+      # --- 侧面D435i相机参数 ---
+      - camera_index: "YOUR_CAMERA_SERIAL_NUMBER_2"  # TODO: 替换为实际序列号
+        enable_color: true
+        enable_depth: true
+        align_depth: true
+        width: 640
+        height: 480
+        fps: 30
+        color_mode: "rgb"
+        force_hardware_reset: true
+      
+      # ===== 组件路径（指向组件类型配置文件）=====
+      paths:
+      - airbot_play           # 使用airbot_play机械臂配置
+      - intelrealsense        # Intel RealSense相机配置
+      - intelrealsense        # Intel RealSense相机配置
+      
+      # ===== 组件角色 =====
+      # 'f' = follower (从动机械臂，执行动作)
+      # 'o' = observer (观察者，即传感器)
+      roles:
+      - f    # 机械臂作为follower（可以手动示教或接收指令）
+      - o    # 相机1作为观察者
+      - o    # 相机2作为观察者
+    
+    # ===== 后处理配置 =====
+    # 用于对采集数据进行后处理（如归一化、数据映射）
+    post_capture:
+      arm:
+        keys:
+        - eef/joint_state/position  # 对末端执行器（夹爪）位置进行后处理
+        target_ranges:
+        - 0:  # 对第0维数据进行映射
+          - 0.0   # 目标最小值（夹爪闭合）
+          - 0.072 # 目标最大值（夹爪打开）
+  
+  path: ''  # 不使用额外的配置文件路径
+
+# ===== 管理器配置 =====
+# 管理器负责控制采集流程
+managers:
+  names:
+  - self_manager    # 自我管理器（监控采集进度）
+  - keyboard        # 键盘控制管理器
+  
+  params:
+  - _target_: airbot_data_collection.managers.basis.SelfManager
+    on_reach: save     # 达到采样上限时自动保存
+    on_reach_round: finish  # 达到轮次上限时结束
+  
+  - _target_: airbot_data_collection.managers.keyboard.KeyboardCallbackManager
+    # 键盘快捷键（默认配置）：
+    # Space - 开始/捕获
+    # S - 保存当前数据
+    # D - 放弃当前数据
+    # Esc - 退出程序
+  
+  paths:
+  - ''
+  - ''
+
+# ===== 采样限制配置 =====
+sample_limit:
+  size: 1           # 每轮最大采样帧数（即每次按Space到再次按Space之间最多采集1帧）
+  start_round: -1    # 起始轮次（-1表示自动检测已有数据）
+  max_rounds: 0      # 最大轮次数（0表示不限制）
+
+# ===== 数据采样器配置 =====
+sampler:
+  name: airbot_mcap_sampler
+  param:
+    _target_: airbot_data_collection.airbot.samplers.mcap_sampler.AIRBOTMcapDataSampler
+    
+    # 任务信息（用于数据集元数据）
+    task_info:
+      task_name: "single_arm_grasp"          # 任务名称
+      task_description: "Single arm grasping with dual RGBD cameras"  # 任务描述（英文）
+      task_description_zh: "单臂双RGBD相机抓取任务"  # 任务描述（中文）
+      task_id: "001"                         # 任务ID
+      station: "workstation-001"             # 工作站ID
+      operator: "user"                       # 操作员名称
+      skill:                                 # 技能列表
+      - pick
+      - place
+      object:                                # 物体列表
+      - cube
+      - cylinder
+      scene: "desktop"                       # 场景描述
+      subtasks: []                          # 子任务列表（可选）
+    
+    # 数据保存格式配置
+    save_type:
+      color: "h264"   # RGB图像编码：h264（压缩）或 raw（无压缩）或 jpeg
+      depth: "raw"    # 深度图编码：raw（16位无损）
+    
+    # 云端上传配置（默认关闭）
+    upload:
+      enabled: false
+      endpoint: "192.168.215.80"
+      username: "admin"
+      password: "123456"
+  
+  path: ''
+
+# ===== 主循环更新频率 =====
+# 控制主循环的运行频率（Hz）
+# 建议: 20-30Hz 可保证数据采集的实时性
+update_rate: 30
+
+# ===== 可视化器配置 =====
+visualizers:
+  names:
+  - opencv  # 使用OpenCV窗口可视化
+  
+  params:
+  - _target_: airbot_data_collection.airbot.visualizers.opencv.AIRBOTOpenCVVisualizer
+    concurrent_mode: process  # 使用独立进程运行可视化（不阻塞主循环）
+    rate: 30                  # 可视化刷新率
+    width: 640                # 显示窗口宽度
+    height: 480               # 显示窗口高度
+  
+  paths:
+  - ''
+
+# ========================================
+# 使用说明：
+# 1. 修改相机序列号: 将 YOUR_CAMERA_SERIAL_NUMBER_1/2 替换为实际的D435i序列号
+#    - 可通过运行 python tests/test_realsense_depth.py 获取
+# 
+# 2. 修改机械臂端口: 根据实际情况修改 port: 50051
+# 
+# 3. 启动机械臂服务（如需要）:
+#    airbot_fsm -i can_left -p 50051
+# 
+# 4. 运行数据采集:
+#    python main.py --path defaults/config_single_arm_dual_rgbd.yaml --dataset.directory (path_to_save_data)
+# 
+# 5. 数据采集流程:
+#    - 按 Space: 开始采集当前帧
+#    - 移动机械臂到目标位置
+#    - 再按 Space: 停止采集
+#    - 按 S: 保存数据
+#    - 按 D: 放弃数据
+#    - 重复以上步骤采集多条数据
+# ========================================

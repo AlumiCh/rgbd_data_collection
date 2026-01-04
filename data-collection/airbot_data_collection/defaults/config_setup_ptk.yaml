@@ -1,0 +1,134 @@
+concurrent_save: none
+dataset:
+  directory: arm1-001
+demonstrator:
+  name: grouped
+  param:
+    _target_: airbot_data_collection.demonstrate.demonstrators.grouped.GroupedDemonstrator
+    auto_control:
+      groups: []
+      modes:
+      - process
+      rates:
+      - 100
+    components:
+      groups: 
+      - left
+      - left
+      - right
+      - right
+      - /
+      - /
+      - /
+      - /
+      names:
+      - lead
+      - follow
+      - lead
+      - follow
+      - left_camera
+      - right_camera
+      - high_camera
+      - low_camera
+      params:
+      - port: 50050
+      - port: 50051
+      - port: 50052
+      - port: 50053
+      - camera_index: usb-0000:00:14.0-1  # left_camera
+        height: 480
+        width: 640
+      - camera_index: usb-0000:00:14.0-11 # right_camera
+        height: 480
+        width: 640
+      - camera_index: usb-0000:67:00.2-2.1.4  # high_camera
+        height: 480
+        width: 640
+      - camera_index: usb-0000:04:00.0-2.3  # low_camera
+        height: 480
+        width: 640
+      paths:
+      - airbot_play
+      - airbot_play
+      - airbot_play
+      - airbot_play
+      - v4l2
+      - v4l2
+      - v4l2
+      - v4l2
+      roles:
+      - l
+      - f
+      - l
+      - f
+      - o
+      - o
+      - o
+      - o
+    post_capture:
+      left:
+        keys:
+        - eef/joint_state/position
+        target_ranges:
+        - 0:
+          - 0
+          - 0.072
+      right:
+        keys:
+        - eef/joint_state/position
+        target_ranges:
+        - 0:
+          - 0
+          - 0.072
+  path: ''
+managers:
+  names:
+  - self_manager
+  - keyboard
+  params:
+  - _target_: airbot_data_collection.managers.basis.SelfManager
+  - _target_: airbot_data_collection.managers.keyboard.KeyboardCallbackManager
+  paths:
+  - ''
+  - ''
+sample_limit:
+  size: 1000
+  start_round: -1
+sampler:
+  name: airbot_mcap_sampler
+  param:
+    _target_: airbot_data_collection.airbot.samplers.mcap_sampler.AIRBOTMcapDataSampler
+    task_info:
+      object:
+      - wooden_blocks
+      - bowl
+      operator: Anonymous
+      scene: desktop
+      skill:
+      - pick
+      - place
+      station: ptk-001
+      subtasks:
+      - description: pick the wooden blocks from the bowl with the gripper
+        description_zh: "\u7528\u5939\u722A\u4ECE\u7897\u4E2D\u62FE\u53D6\u6728\u5236\
+          \u79EF\u6728"
+        skill: pick
+      task_description: do some thing
+      task_id: '135'
+      task_name: anonymous task
+    upload:
+      enabled: false
+      endpoint: 192.168.215.80
+      password: '123456'
+      username: admin
+  path: ''
+update_rate: 20
+visualizers:
+  names:
+  - opencv
+  params:
+  - _target_: airbot_data_collection.airbot.visualizers.opencv.AIRBOTOpenCVVisualizer
+    concurrent_mode: process
+    rate: 30
+  paths:
+  - ''

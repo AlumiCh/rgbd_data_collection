@@ -1,0 +1,12 @@
+_target_: airbot_data_collection.airbot.robots.airbot_play.AIRBOTPlay
+
+url: localhost
+port: 50050
+speed_profile: FAST # DEFAULT, SLOW, FAST
+action: []
+observation:
+  - interfaces:
+      - joint_position
+      - joint_velocity
+      - joint_effort
+      - pose
