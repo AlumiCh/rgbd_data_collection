@@ -176,9 +176,11 @@ class IntelRealSenseCamera(Sensor):
     ) -> Dict[str, np.ndarray]:
         """Capture an observation from the camera.
         Returns:
-            A dictionary containing the captured images.
+            A dictionary with keys:
+            - "color/image_raw": RGB/BGR color image (ndarray)
+            - "aligned_depth_to_color/image_raw" or "depth/image_rect_raw": depth map (ndarray, if enable_depth=True)
         Raises:
-            OSError: If the image cannot be captured.
+            OSError: If the image cannot be captured or camera is not ready.
         """
         frame = self._rs_pipe.wait_for_frames(timeout_ms=5000)
         if self.config.align_depth:
@@ -186,7 +188,7 @@ class IntelRealSenseCamera(Sensor):
         color_frame = frame.get_color_frame()
         if not color_frame:
             raise OSError(
-                f"Can't capture color image from IntelRealSenseCamera({self.camera_index})."
+                f"Can't capture color image from IntelRealSenseCamera({self.config.camera_index})."
             )
         color_image = np.asanyarray(color_frame.get_data())
         # IntelRealSense uses RGB format as default (red, green, blue).
