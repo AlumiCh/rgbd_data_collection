@@ -14,3 +14,4 @@ config_setup.yaml
 airbot_logs/
 airbot_data_collection/airbot/samplers/RGBD_SUPPORT_VERIFICATION.md
 airbot_data_collection/scripts/dual_camera_calibration_example.yaml
+airbot_data_collection/scripts/data_convert/rgbd_to_pointcloud_examples.py
