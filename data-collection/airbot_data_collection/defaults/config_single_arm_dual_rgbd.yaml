@@ -65,8 +65,8 @@ demonstrator:
       # ===== 组件路径（指向组件类型配置文件）=====
       paths:
       - airbot_play           # 使用airbot_play机械臂配置
-      - intelrealsense        # Intel RealSense相机配置
-      - intelrealsense        # Intel RealSense相机配置
+      - realsense             # Intel RealSense相机配置
+      - realsense             # Intel RealSense相机配置
       
       # ===== 组件角色 =====
       # 'f' = follower (从动机械臂，执行动作)
