@@ -93,7 +93,7 @@ class DualCameraCalibrator:
         """初始化两台RealSense相机"""
         print("\n[1/5] 正在初始化相机...")
         
-        # ===== 添加代码标记 - 初始化相机1 =====
+        # ===== 初始化相机1 =====
         # 相机1配置
         config1 = rs.config()
         config1.enable_device(self.serial1)
@@ -117,7 +117,7 @@ class DualCameraCalibrator:
         }
         print(f"  ✓ 相机1 ({self.serial1}) 初始化成功")
         
-        # ===== 添加代码标记 - 初始化相机2 =====
+        # ===== 初始化相机2 =====
         # 相机2配置
         config2 = rs.config()
         config2.enable_device(self.serial2)
@@ -173,7 +173,7 @@ class DualCameraCalibrator:
         
         captured_count = 0
         
-        # ===== 添加代码标记 - 图像采集主循环 =====
+        # ===== 图像采集主循环 =====
         while not self.should_exit:
             # 获取两个相机的帧
             frames1 = self.pipeline1.wait_for_frames()
@@ -273,7 +273,7 @@ class DualCameraCalibrator:
         
         print("\n[3/5] 正在计算相机外参...")
         
-        # ===== 添加代码标记 - 生成世界坐标系角点 =====
+        # ===== 生成世界坐标系角点 =====
         # 构建世界坐标系中的3D点
         objp = np.zeros((self.board_size[0] * self.board_size[1], 3), np.float32)
         objp[:, :2] = np.mgrid[0:self.board_size[0], 0:self.board_size[1]].T.reshape(-1, 2)
@@ -300,7 +300,7 @@ class DualCameraCalibrator:
         
         image_size = (self.width, self.height)
         
-        # ===== 添加代码标记 - 双目标定 =====
+        # ===== 双目标定 =====
         # 执行双目标定
         print("  正在执行立体标定...")
         ret, K1, D1, K2, D2, R, t, E, F = cv2.stereoCalibrate(
@@ -347,7 +347,7 @@ class DualCameraCalibrator:
         
         print(f"\n[4/5] 正在保存标定结果...")
         
-        # ===== 添加代码标记 - 准备保存数据 =====
+        # ===== 准备保存数据 =====
         calibration_data = {
             'calibration_date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'board_config': {
@@ -441,7 +441,7 @@ class DualCameraCalibrator:
 
 
 def main():
-    # ===== 添加代码标记 - 命令行参数解析 =====
+    # ===== 命令行参数解析 =====
     parser = argparse.ArgumentParser(
         description="双RealSense相机外参标定工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
