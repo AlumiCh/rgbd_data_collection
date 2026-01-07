@@ -1,11 +1,11 @@
 (airbot_data) jojo@jojo-System-Product-Name:~/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection$ python main.py --path defaults/config_single_arm_dual_rgbd.yaml \--dataset.directory="data/test_20260107" \--sample-limit.size=1
-[INFO] 2026-01-07 16:52:30,259 airbot-data-collection: Preparing cv2.imshow (opencv.py:28)
-[INFO] 2026-01-07 16:52:30,259 airbot-data-collection: Showing Prepared image (opencv.py:32)
-[INFO] 2026-01-07 16:52:30,300 airbot-data-collection: Prepared image is ready (opencv.py:35)
-[INFO] 2026-01-07 16:52:30,301 airbot-data-collection: cv2.imshow is ready (opencv.py:40)
-[INFO] 2026-01-07 16:52:30,317 airbot-data-collection: Version: 0.6.3 (main.py:38)
-[WARNING] 2026-01-07 16:52:30,368 airbot_data_collection.airbot.samplers.mcap_sampler: It is detected that the `UPLOAD` package is not installed, and the cloud upload function will not be available. If you need to use the upload function, please contact us to install it. (mcap_sampler.py:30)
-[INFO] 2026-01-07 16:52:30,460 KeyboardCallbackManager:  
+[INFO] 2026-01-07 17:07:43,563 airbot-data-collection: Preparing cv2.imshow (opencv.py:28)
+[INFO] 2026-01-07 17:07:43,563 airbot-data-collection: Showing Prepared image (opencv.py:32)
+[INFO] 2026-01-07 17:07:43,625 airbot-data-collection: Prepared image is ready (opencv.py:35)
+[INFO] 2026-01-07 17:07:43,625 airbot-data-collection: cv2.imshow is ready (opencv.py:40)
+[INFO] 2026-01-07 17:07:43,659 airbot-data-collection: Version: 0.6.3 (main.py:38)
+[WARNING] 2026-01-07 17:07:43,716 airbot_data_collection.airbot.samplers.mcap_sampler: It is detected that the `UPLOAD` package is not installed, and the cloud upload function will not be available. If you need to use the upload function, please contact us to install it. (mcap_sampler.py:30)
+[INFO] 2026-01-07 17:07:43,787 KeyboardCallbackManager:  
 {'b': 'Back to sample the last round (override the last saved file)',
  'f': 'Start / stop following',
  'f2': 'Lock / unlock the keyboard control',
@@ -17,9 +17,9 @@
  's': 'Save sampled data in the current round',
  'space': 'Start sampling',
  'z': 'Finish the current round and save all data'} (keyboard.py:75)
-[INFO] 2026-01-07 16:52:30,461 airbot-data-collection: Update rate: 30.0 Hz (main.py:56)
-[INFO] 2026-01-07 16:52:30,461 SelfManager: Configuring the demonstrate interface. (basis.py:91)
-[ERROR] 2026-01-07 16:52:30,482 transitions.DemonstrateFSM: <EventData(<LockedEvent('t_configure')@139954089139200>, <State('unconfigured')@139954089135840>, None)@139953154592096> (basis.py:284)
+[INFO] 2026-01-07 17:07:43,787 airbot-data-collection: Update rate: 30.0 Hz (main.py:56)
+[INFO] 2026-01-07 17:07:43,788 SelfManager: Configuring the demonstrate interface. (basis.py:91)
+[ERROR] 2026-01-07 17:07:44,363 transitions.DemonstrateFSM: <EventData(<LockedEvent('t_configure')@140038654974976>, <State('unconfigured')@140038654971904>, None)@140037787632736> (basis.py:284)
 Traceback (most recent call last):
   File "/home/jojo/anaconda3/envs/airbot_data/lib/python3.10/site-packages/transitions/core.py", line 420, in _trigger
     self._process(event_data)
@@ -51,28 +51,29 @@ Traceback (most recent call last):
     validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
 pydantic_core._pydantic_core.ValidationError: 4 validation errors for DemonstrateGroup
 others.0.is-instance[System]
-  Input should be an instance of System [type=is_instance_of, input_value={'camera_index': 25012207...e_hardware_reset': True}, input_type=DictConfig]
+  Input should be an instance of System [type=is_instance_of, input_value={'camera_index': 25012207...ue, 'align_depth': True}, input_type=DictConfig]
     For further information visit https://errors.pydantic.dev/2.12/v/is_instance_of
 others.0.is-instance[Sensor]
-  Input should be an instance of Sensor [type=is_instance_of, input_value={'camera_index': 25012207...e_hardware_reset': True}, input_type=DictConfig]
+  Input should be an instance of Sensor [type=is_instance_of, input_value={'camera_index': 25012207...ue, 'align_depth': True}, input_type=DictConfig]
     For further information visit https://errors.pydantic.dev/2.12/v/is_instance_of
 others.1.is-instance[System]
-  Input should be an instance of System [type=is_instance_of, input_value={'camera_index': 24352207...e_hardware_reset': True}, input_type=DictConfig]
+  Input should be an instance of System [type=is_instance_of, input_value={'camera_index': 24352207...ue, 'align_depth': True}, input_type=DictConfig]
     For further information visit https://errors.pydantic.dev/2.12/v/is_instance_of
 others.1.is-instance[Sensor]
-  Input should be an instance of Sensor [type=is_instance_of, input_value={'camera_index': 24352207...e_hardware_reset': True}, input_type=DictConfig]
+  Input should be an instance of Sensor [type=is_instance_of, input_value={'camera_index': 24352207...ue, 'align_depth': True}, input_type=DictConfig]
     For further information visit https://errors.pydantic.dev/2.12/v/is_instance_of
-[WARNING] 2026-01-07 16:52:30,489 transitions.DemonstrateFSM: Action failed: configure (basis.py:244)
-[INFO] 2026-01-07 16:52:30,490 SelfManager: Failed to configure the demonstrate interface. (basis.py:96)
-[WARNING] 2026-01-07 16:52:30,490 airbot-data-collection: Failed to update manager: self_manager. (main.py:69)
-[INFO] 2026-01-07 16:52:35,573 KeyboardCallbackManager: Executing action: sample (keyboard.py:132)
-[WARNING] 2026-01-07 16:52:35,573 transitions.core: Can't trigger event t_sample from state unconfigured! (core.py:454)
-[WARNING] 2026-01-07 16:52:35,573 transitions.DemonstrateFSM: Action failed: sample (basis.py:244)
- ^C[INFO] 2026-01-07 16:52:43,778 airbot-data-collection: Keyboard interrupt received. Exiting... (main.py:94)
-[INFO] 2026-01-07 16:52:43,778 airbot-data-collection: Shutting down: self_manager. (main.py:97)
-[INFO] 2026-01-07 16:52:43,778 airbot-data-collection: Shutting down: keyboard. (main.py:97)
-[INFO] 2026-01-07 16:52:43,779 airbot-data-collection: Summary:
-{'Average update freq': '20469.1537 Hz',
- 'Average update time': '0.0000 s',
- 'Total time taken': '13.3172 s'} (main.py:110)
-[INFO] 2026-01-07 16:52:43,779 airbot-data-collection: Done. (main.py:111)
+[WARNING] 2026-01-07 17:07:44,364 transitions.DemonstrateFSM: Action failed: configure (basis.py:244)
+[INFO] 2026-01-07 17:07:44,364 SelfManager: Failed to configure the demonstrate interface. (basis.py:96)
+[WARNING] 2026-01-07 17:07:44,364 airbot-data-collection: Failed to update manager: self_manager. (main.py:69)
+[WARNING] 2026-01-07 17:07:44,364 airbot-data-collection: Update took too long: exceed 0.5433250046548589 s. (main.py:92)
+[INFO] 2026-01-07 17:07:55,378 KeyboardCallbackManager: Executing action: sample (keyboard.py:132)
+[WARNING] 2026-01-07 17:07:55,378 transitions.core: Can't trigger event t_sample from state unconfigured! (core.py:454)
+[WARNING] 2026-01-07 17:07:55,379 transitions.DemonstrateFSM: Action failed: sample (basis.py:244)
+ ^C[INFO] 2026-01-07 17:07:58,947 airbot-data-collection: Keyboard interrupt received. Exiting... (main.py:94)
+[INFO] 2026-01-07 17:07:58,948 airbot-data-collection: Shutting down: self_manager. (main.py:97)
+[INFO] 2026-01-07 17:07:58,948 airbot-data-collection: Shutting down: keyboard. (main.py:97)
+[INFO] 2026-01-07 17:07:58,948 airbot-data-collection: Summary:
+{'Average update freq': '19127.8462 Hz',
+ 'Average update time': '0.0001 s',
+ 'Total time taken': '15.1604 s'} (main.py:110)
+[INFO] 2026-01-07 17:07:58,948 airbot-data-collection: Done. (main.py:111)
