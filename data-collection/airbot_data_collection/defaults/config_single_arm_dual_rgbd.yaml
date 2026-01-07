@@ -25,28 +25,32 @@ demonstrator:
       rates:
       - 100
     
-    # 组件配置：机械臂 + 两个RGBD相机
+    # 组件配置：机械臂(lead+follow) + 两个RGBD相机
     components:
       # ===== 组别定义 =====
-      # 'arm' - 机械臂组
+      # 'arm' - 机械臂组（包含lead和follow）
       # '/' - 相机1（独立组）
       # '/' - 相机2（独立组）
       groups: 
-      - arm           # 机械臂
+      - arm           # 主臂（lead）
+      - arm           # 从臂（follow）
       - /             # 正面俯视相机（独立）
       - /             # 侧面相机（独立）
       
       # ===== 组件名称 =====
       names:
-      - arm_follower          # 机械臂名称
+      - lead          # 主臂：操作员手动移动
+      - follow        # 从臂：跟随主臂运动并记录
       - camera_front_top      # 正面俯视相机
       - camera_side           # 侧面相机
       
       # ===== 组件参数配置 =====
       params:
-      # --- 机械臂参数 ---
-      - port: 50051  # 机械臂通信端口
-        # 如需指定IP，添加: ip: "localhost" 或 ip: "192.168.1.100"
+      # --- 主臂(lead)参数 ---
+      - port: 50050  # 主臂通信端口
+      
+      # --- 从臂(follow)参数 ---
+      - port: 50051  # 从臂通信端口
       
       # --- 正面俯视D435i相机参数 ---
       - camera_index: 250122073394  # 相机序列号
@@ -64,15 +68,18 @@ demonstrator:
       
       # ===== 组件路径（指向组件类型配置文件）=====
       paths:
-      - airbot_play           # 使用airbot_play机械臂配置
+      - airbot_play           # 主臂配置
+      - airbot_play           # 从臂配置
       - realsense             # Intel RealSense相机配置
       - realsense             # Intel RealSense相机配置
       
       # ===== 组件角色 =====
-      # 'f' = follower (从动机械臂，执行动作)
+      # 'l' = leader (主臂，用于示教)
+      # 'f' = follower (从臂，跟随并记录)
       # 'o' = observer (观察者，即传感器)
       roles:
-      - f    # 机械臂作为follower（可以手动示教或接收指令）
+      - l    # 主臂：操作员手动移动
+      - f    # 从臂：跟随主臂动作
       - o    # 相机1作为观察者
       - o    # 相机2作为观察者
     
