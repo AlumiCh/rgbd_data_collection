@@ -49,26 +49,18 @@ demonstrator:
         # 如需指定IP，添加: ip: "localhost" 或 ip: "192.168.1.100"
       
       # --- 正面俯视D435i相机参数 ---
-      - camera_index: 250122073394
-        enable_color: true       # 启用RGB图像
-        enable_depth: true       # 启用深度图像
-        align_depth: true        # 将深度图对齐到RGB图
-        width: 640              # 图像宽度
+      - camera_index: 250122073394  # 相机序列号
         height: 480             # 图像高度
-        fps: 30                 # 帧率
-        color_mode: "rgb"       # 颜色模式
-        force_hardware_reset: true  # 强制硬件重置
+        width: 640              # 图像宽度
+        enable_depth: true      # 启用深度图像
+        align_depth: true       # 将深度图对齐到RGB图
       
       # --- 侧面D435i相机参数 ---
-      - camera_index: 243522071790
-        enable_color: true
+      - camera_index: 243522071790  # 相机序列号
+        height: 480
+        width: 640
         enable_depth: true
         align_depth: true
-        width: 640
-        height: 480
-        fps: 30
-        color_mode: "rgb"
-        force_hardware_reset: true
       
       # ===== 组件路径（指向组件类型配置文件）=====
       paths:
