@@ -86,6 +86,13 @@ class AIRBOTMcapDataSamplerConfig(BaseModel):
     upload: UploadConfig = UploadConfig()
     initial_builder_size: PositiveInt = 1024 * 1024  # 1 MB
     video_time_base: int = int(1e6)  # μs to avoid save error
+    
+    # ========== 一个可选的功能参数 (吕晨 2026-01-08) ==========
+    # 功能: 保存第 1 帧 的 RGBD，用于后续转为待抓取物体的点云；以及最后 1 帧的机械臂关节角
+    # 说明: 默认为 False，不需要修改现有的其它配置文件，不会产生影响
+    #      需要此功能就在配置文件中设为 True 以启用
+    filter_first_last_frame: bool = False
+    # ================================================
 
 
 class AIRBOTMcapDataSampler(DataSampler):
@@ -125,9 +132,85 @@ class AIRBOTMcapDataSampler(DataSampler):
                 if self._add_messages(key, [data[key]], [data["log_stamps"]]):
                     data.pop(key)
         return data
+    
+    # ========== 可选功能：保留第 1 帧的 RGBD 以及最后 1 帧的机械臂关节角 (吕晨 2026-01-08) START ==========
+    # 说明: 此方法仅在参数 filter_first_last_frame=True 时被调用
+    #      其他任务不受影响，不需要更改配置文件
+    # 用途: 保存第 1 帧 的 RGBD，用于后续转为待抓取物体的点云；以及最后 1 帧的机械臂关节角
+    def _filter_first_and_last_frame(self, data: dict) -> dict:
+        """
+        过滤采集的数据:
+        - RGBD图像（color/depth）：只保留第1帧（此时机械臂未遮挡物体）
+        - 关节角数据（joint_state）：只保留最后1帧（理想抓取位姿）
+        - log_stamps：保留对应的时间戳
+        
+        Args:
+            data: 原始采集的所有帧数据
+            
+        Returns:
+            filtered_data: 过滤后的数据字典
+        """
+        filtered_data = {}
+        
+        # 获取总帧数
+        log_stamps = data.get("log_stamps", [])
+        total_frames = len(log_stamps)
+        
+        if total_frames == 0:
+            self.get_logger().warning("没有采集到任何帧数据!")
+            return data
+        
+        self.get_logger().info(
+            f"数据过滤: 总共采集 {total_frames} 帧 -> "
+            f"保留第 1 帧 RGBD 图像 + 第 {total_frames} 帧关节角"
+        )
+        
+        # 遍历所有数据通道
+        for key, values in data.items():
+            if key == "log_stamps":
+                # log_stamps需要根据保留的数据重新构建
+                continue
+                
+            if not isinstance(values, list) or len(values) == 0:
+                filtered_data[key] = values
+                continue
+            
+            # 判断数据类型
+            is_rgbd_data = ("/color/" in key or "depth" in key)
+            is_joint_data = ("joint_state" in key or "pose" in key)
+            
+            if is_rgbd_data:
+                # RGBD数据：只保留第1帧
+                filtered_data[key] = [values[0]]
+                self.get_logger().debug(f"  {key}: 保留第 1 帧")
+                
+            elif is_joint_data:
+                # 关节角数据：只保留最后1帧
+                filtered_data[key] = [values[-1]]
+                self.get_logger().debug(f"  {key}: 保留第 {total_frames} 帧")
+                
+            else:
+                # 其他数据：保持原样
+                filtered_data[key] = values
+                self.get_logger().debug(f"  {key}: 保留所有帧")
+        
+        # 重新构建log_stamps: [第1帧的时间戳, 最后1帧的时间戳]
+        filtered_data["log_stamps"] = [log_stamps[0], log_stamps[-1]]
+        
+        return filtered_data
+    # ========== 可选功能：保留第 1 帧的 RGBD 以及最后 1 帧的机械臂关节角 END ==========
 
     def save(self, path: str, data: dict) -> str:
         """Save the data to a MCAP file."""
+        
+        # ========== 可选功能：保留第 1 帧的 RGBD 以及最后 1 帧的机械臂关节角 (吕晨 2026-01-08) START ==========
+        # 说明: 此方法仅在参数 filter_first_last_frame=True 时被调用
+        #      其他任务不受影响，不需要更改配置文件
+        if self.config.filter_first_last_frame:
+            data = self._filter_first_and_last_frame(data)
+            self.get_logger().info("已保留第 1 帧 RGBD + 最后 1 帧关节角")
+        # ========== 可选功能：保留第 1 帧的 RGBD 以及最后 1 帧的机械臂关节角 END ==========
+        
         writer = self._mf_writer.get_writer()
         info = self._info.copy()
         # add metadata
@@ -159,9 +242,11 @@ class AIRBOTMcapDataSampler(DataSampler):
             data=json.dumps(info).encode("utf-8"),
             media_type="application/json",
         )
+        
         log_stamps = data.pop("log_stamps")
         self.add_log_stamps_attachment(writer, log_stamps)
         # register channels and add messages
+        
         for key, values in data.items():
             if not self._add_messages(key, values, log_stamps):
                 self.get_logger().warning(f"Unknown data type for key: {key}")
