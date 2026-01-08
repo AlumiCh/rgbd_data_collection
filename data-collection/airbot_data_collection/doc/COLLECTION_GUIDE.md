@@ -18,36 +18,80 @@
 *   **产出**: 生成 `calibration_result.yaml`，包含 `T_2_1`（相机 2 到相机 1 的坐标变换矩阵）。
 
 ### 第二步：数据采集 (执行阶段)
+
+#### 准备工作：启动两个机械臂服务
+在运行采集程序前，**必须分别启动两个机械臂的通信服务**：
+
+```bash
+# 终端1：启动主臂服务(lead，端口50052)
+airbot_fsm -i can_left -p 50052
+
+# 终端2：启动从臂服务(follow，端口50053)
+airbot_fsm -i can_right -p 50053
+```
+
+#### 运行数据采集程序
+
 *   **运行命令**:
     ```bash
     # 使用专用配置文件启动采集程序
     python main.py --config-name config_single_arm_dual_rgbd \
            dataset.directory="data/pick_and_place_task" \
-           sample_limit=1
+           sample_limit.size=1
     ```
 *   **主要参数**:
     *   `--config-name`: 指定使用 `config_single_arm_dual_rgbd.yaml`。
     *   `dataset.directory`: 设置数据存储目录。
-    *   `sample_limit=1`: 按照需求，每运行一次程序采集 1 帧数据。
+    *   `sample_limit.size=1`: 每次按Space采集的最大帧数（设为1表示单帧）。
+    
 *   **操作员动作**: 
     1.  布置好抓取环境（物体放置）。
-    2.  启动命令，机械臂会自动记录当前关节角。
-    3.  程序会自动开启 RealSense 分发并捕捉一帧 RGBD 图像并存储为 MCAP 格式。
-    4.  确认终端显示 "Collection finished" 即可。
+    2.  启动上述命令，等待系统初始化完成。
+    3.  **启动主从机械臂跟随的实例**：激活跟随模式（主臂→从臂同步）
+    4.  **按 `Space` 键**：开始记录数据
+    5.  此时保持机械臂静止约0.5秒（系统会记录第1帧作为物体点云，此时机械臂未遮挡物体）
+    6.  移动主臂（lead臂）到目标抓取位置，从臂会实时跟随
+    7.  到达理想抓取位姿后，**再按 `Space` 键**：停止记录数据（系统会记录最后1帧的关节角作为目标位姿）
+    8.  **按 `s` 键**：保存当前采集的数据
+    9.  重复步骤4-8采集多条数据，或按 `ctrl + c` 键结束采集
+
+*   **数据说明**：
+    - 每条数据包含：**第1帧的双相机RGBD图像**（用于生成物体点云） + **最后1帧的机械臂关节角**（目标抓取位姿）
+    - 采样时长建议：1-3秒（30-100帧），给操作员足够时间完成动作
+    - 系统会自动过滤中间帧，只保存关键帧
 
 ### 第三步：点云转换 (后处理阶段)
-*   **运行命令**:
+
+点云转换工具现已精简为**双相机融合模式**，直接输出PLY格式。
+
+*   **运行命令（单个MCAP文件）**:
     ```bash
     # 将采集的原始 RGBD 视频流转换为融合后的点云文件
     python scripts/data_convert/rgbd_to_pointcloud.py \
-           --input data/pick_and_place_task/demo_0.mcap \
+           --mcap data/pick_and_place_task/demo_0.mcap \
            --calibration calibration_result.yaml \
-           --output_format pcd
+           --output pointclouds/
     ```
-*   **参数**:
-    *   `--input`: 输入的 MCAP 文件路径。
-    *   `--calibration`: 引用第一步生成的标定文件。
-    *   `--output_format`: 选择 `pcd` 或 `ply`。
+
+*   **批量处理命令（整个目录）**:
+    ```bash
+    python scripts/data_convert/rgbd_to_pointcloud.py \
+           --mcap-dir data/pick_and_place_task/ \
+           --calibration calibration_result.yaml \
+           --output pointclouds/ \
+           --voxel-size 0.005
+    ```
+
+*   **参数说明**:
+    *   `--mcap`: 单个MCAP文件路径（与 `--mcap-dir` 二选一）
+    *   `--mcap-dir`: MCAP文件所在目录（与 `--mcap` 二选一）
+    *   `--calibration`: 第一步标定结果的YAML文件路径（**必需**）
+    *   `--output`: 输出点云文件的目录
+    *   `--voxel-size`: 点云下采样体素大小（米，可选），默认不下采样
+    
+*   **输出格式**:
+    *   所有点云文件保存为 `.ply` 格式（带颜色和法向量信息）
+    *   文件名规则：`{原始mcap名}_fused.ply`（例如：`demo_0_fused.ply`）
 
 ---
 
@@ -55,20 +99,33 @@
 
 在实际环境下，您可能需要根据光照、物体材质和物理距离调整以下参数：
 
-### 配置 YAML 文件中的参数 (`defaults/config_single_arm_dual_rgbd.yaml`):
+### 配置YAML文件中的参数 (`defaults/config_single_arm_dual_rgbd.yaml`)：
 1.  **`serial_number`**: 必须替换为实际 D435i 相机底部的序列号，否则无法识别硬件。
-2.  **`image_size`**: `[640, 480]` 是推荐的平衡性能与分辨率的选项，若需更高精度可设为 `[1280, 720]`。
-3.  **`fps`**: 当前设为 30。对于单帧采集，此参数影响较小，但对于动态轨迹采集需保证稳定。
+    *   查询方法：`rs-enumerate-devices` 或 `python tests/list_cameras.py`
+2.  **`width` / `height`**: 分辨率。`640x480` 是推荐的平衡性能与分辨率的选项。
+3.  **`enable_depth`**: 启用深度流（固定为 `true`）
+4.  **`align_depth`**: 深度对齐到RGB坐标系（固定为 `true`，确保同步）
 
-### 转换脚本中的参数 (`scripts/data_convert/rgbd_to_pointcloud.py`):
-1.  **`depth_threshold` (核心控制)**: 
-    *   **作用**: 过滤掉背景点云（如远处墙壁）。单位为米。
-    *   **建议**: 若抓取环境较小，建议设为 `1.0` (1米) 或更短，以减少杂点。
-2.  **`voxel_size`**:
+### 运行时参数 (`main.py` 命令行)：
+1.  **`sample_limit.size`**: 
+    *   **作用**: 每次按Space采集的最大帧数
+    *   **说明**: 系统会自动只保存第1帧RGBD和最后1帧关节角，中间帧会被过滤
+2.  **`dataset.directory`**: 
+    *   **作用**: 数据保存目录
+    *   **建议**: 使用具有描述性的目录名，如 `data/pick_task_20260108`
+
+### 点云转换脚本中的参数 (`scripts/data_convert/rgbd_to_pointcloud.py`)：
+1.  **`--depth-min` 和 `--depth-max`** (默认: 0.1m ~ 5.0m):
+    *   **作用**: 有效深度范围过滤。移除过近或过远的点云。
+    *   **建议**: 根据实际工作环境调整。例如，在1米范围内工作可设为 `--depth-min 0.3 --depth-max 1.5`
+2.  **`--voxel-size`** (默认: 无下采样):
     *   **作用**: 点云下采样的体素大小（单位：米）。
-    *   **建议**: 设置为 `0.005` (5mm) 可有效平衡点云细节与文件大小。
-3.  **`depth_scale`**: 
-    *   **作用**: 深度值映射。Intel RealSense 默认为 `1000.0` (即 1mm = 1单位)。若使用不同型号相机可能需要修改。
+    *   **建议**: 
+        - `0.005` (5mm)：平衡点云细节与文件大小
+        - `0.01` (10mm)：快速处理和低内存占用
+3.  **`--depth-scale`** (默认: 0.001):
+    *   **作用**: 深度值缩放因子。Intel RealSense D435i 深度值单位为mm，所以默认为0.001。
+    *   **建议**: 一般无需修改
 
 ---
 
@@ -76,21 +133,91 @@
 
 系统的运行流程遵循以下层级依赖关系：
 
-1.  **硬件驱动层 (底层)**: 
-    *   依赖 `librealsense` 和 `airbot_py`。
-    *   `Main.py` 启动时会通过 `RealSenseObserver` 和 `AirbotArm` 实例初始化硬件模块。
 
-2.  **状态机控制层 (中层)**: 
-    *   `fsm.py` 驱动。它管理从 `START` -> `PREPARING` -> `SAMPLING` -> `SUCCESS` 的流转。
-    *   **依赖关系**: FSM 依赖于 `McapSampler` 来执行具体的“数据写入”动作。
+### 数据采集阶段的依赖链：
 
-3.  **数据采样层 (核心)**: 
-    *   `McapSampler` 订阅来自相机的 `OBSERVATION` 消息。
-    *   当 FSM 触发采样信号时，Sampler 将 `uint16` 深度图（RAW）和 `JPEG/H264` 彩色图打包存入 MCAP 容器。
+```
+硬件驱动层 (底层)
+    ├── librealsense (D435i相机驱动)
+    └── airbot_py (机械臂驱动)
+           ↓
+    RealSenseObserver (相机观察者)  +  AirbotArm (机械臂lead/follow)
+           ↓
+状态机控制层 (中层)
+    ├── FSM (有限状态机)
+    │   状态流转: START → PREPARING → SAMPLING → SUCCESS
+    └── KeyboardCallbackManager (键盘控制)
+           ↓
+数据采样层 (核心)
+    └── McapSampler
+        │ 功能：
+        ├── 订阅两个相机的OBSERVATION消息（RGB+Depth）
+        ├── 订阅从臂的关节角数据（joint_state）
+        └── 在FSM采样信号时，将数据同步打包存入MCAP容器
+           ↓
+    存储格式 (MCAP容器)
+    ├── RGB图像：H.264编码（压缩）
+    ├── 深度图：RAW uint16（无损，保留原始精度）
+    └── 关节角：json格式（原始数据）
+```
 
-4.  **离线工具链 (顶层)**: 
-    *   `rgbd_to_pointcloud.py` 独立运行，不依赖实时硬件。
-    *   它读取 MCAP 容器，利用标定结果 (`T_2_1`) 对点云进行空间配准并执行 Open3D 投影算法。
+### 数据处理阶段的依赖链：
 
-**总结逻辑图**:
-`用户命令` -> `main.py(FSM)` -> `传感器(获取RGBD)` + `机器人(获取关节角)` -> `MCAP(原始存储)` -> `转换工具(坐标变换+重构)` -> `点云PCD`
+```
+MCAP文件 (采集阶段产出)
+    ↓
+rgbd_to_pointcloud.py (离线处理工具)
+    ├── 输入1：calibration_result.yaml
+    │   (包含T_2_1外参矩阵：相机2→相机1的坐标变换)
+    ├── 输入2：MCAP文件
+    │   (包含RGBD数据和内参信息)
+    ├── 处理流程：
+    │   1. 解码RGB图像和深度图
+    │   2. 深度图单位转换 (mm → m)
+    │   3. 每个相机分别生成点云
+    │   4. 使用T_2_1将相机2的点云变换到相机1坐标系
+    │   5. 融合两个点云 (可选体素下采样)
+    └── 输出：.ply文件 (带颜色和法向量)
+```
+
+### 关键依赖关系总结：
+
+| 阶段 | 依赖关系 | 必需参数 |
+|------|--------|--------|
+| **标定** | OpenCV + 两个D435i相机 | 棋盘格尺寸 |
+| **采集** | lead/follow机械臂 + 两个D435i相机 | 相机序列号、机械臂端口 |
+| **转换** | Open3D + 标定文件 | calibration.yaml |
+
+### 整体数据流：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    完整数据采集流程                          │
+└─────────────────────────────────────────────────────────────┘
+        ↓
+   外参标定 (一次)
+   calibrate_dual_cameras.py
+        ↓
+   保存: calibration_result.yaml (T_2_1矩阵)
+        ↓
+   ┌──────────────────────────────────────┐
+   │   数据采集循环 (重复多次)              │
+   │                                      │
+   │  1. 启动主从机械臂跟随实例激活跟随      │
+   │  2. 按Space开始采集                   │
+   │  3. 保持静止0.5秒（记录第1帧）         │
+   │  4. 操作主臂移动到抓取位姿             │
+   │  5. 按Space停止采集（记录最后1帧）     │
+   │  6. 按s保存数据                       │
+   │                                      │
+   │  产出: demo_0.mcap, demo_1.mcap ...  │
+   │  (每个文件包含第1帧RGBD+最后1帧关节角)│
+   └──────────────────────────────────────┘
+        ↓
+   点云转换处理
+   rgbd_to_pointcloud.py (离线)
+        ↓
+   输出: demo_0_fused.ply, demo_1_fused.ply ...
+        ↓
+   用于后续的机器学习/3D重建等任务
+```
