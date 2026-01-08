@@ -5,28 +5,23 @@ RGBD图像转点云工具
 功能：
 1. 从MCAP文件中读取RGBD数据
 2. 使用相机内参将深度图转换为点云
-3. 支持单相机和双相机点云
-4. 支持点云融合到统一坐标系
-5. 保存为.pcd或.ply格式
+3. 支持点云融合到统一坐标系
+4. 保存为.ply格式
 
 使用方法：
-    # 单个MCAP文件 - 单相机
-    python rgbd_to_pointcloud.py --mcap data/0.mcap --output pointclouds/
-    
-    # 单个MCAP文件 - 双相机（融合）
+    # 单个MCAP文件
     python rgbd_to_pointcloud.py \\
         --mcap data/0.mcap \\
-        --output pointclouds/ \\
         --calibration calibration.yaml \\
-        --fusion
+        --output pointclouds/
 
     # 批量处理
     python rgbd_to_pointcloud.py \\
         --mcap-dir dataset/ \\
-        --output pointclouds/ \\
-        --format ply
+        --calibration calibration.yaml \\
+        --output pointclouds/
 
-日期：2026-01-04
+日期：2026-01-07
 """
 
 import argparse
@@ -93,7 +88,7 @@ class RGBDToPointCloud:
             'metadata': {}
         }
         
-        # ===== 添加代码标记 - 读取MCAP数据 =====
+        # ===== 读取MCAP数据 =====
         with open(mcap_path, 'rb') as f:
             reader = make_reader(f)
             
@@ -191,20 +186,20 @@ class RGBDToPointCloud:
         Returns:
             Open3D点云对象
         """
-        # ===== 添加代码标记 - RGBD转点云 =====
+        # ===== RGBD转点云 =====
         
-        # 1. 验证输入
+        # 验证输入
         assert rgb.shape[:2] == depth.shape, "RGB和深度图尺寸不匹配"
         
         height, width = depth.shape
         
-        # 2. 转换深度图单位（mm → m）
+        # 转换深度图单位（mm → m）
         depth_m = depth.astype(np.float32) * self.depth_scale / 1000.0
         
-        # 3. 深度过滤
+        # 深度过滤
         valid_mask = (depth_m >= self.depth_threshold[0]) & (depth_m <= self.depth_threshold[1])
         
-        # 4. 创建RGBD图像对象
+        # 创建RGBD图像对象
         rgb_o3d = o3d.geometry.Image(rgb)
         depth_o3d = o3d.geometry.Image(depth_m)
         rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
@@ -214,7 +209,7 @@ class RGBDToPointCloud:
             convert_rgb_to_intensity=False
         )
         
-        # 5. 创建相机内参对象
+        # 创建相机内参对象
         intrinsic = o3d.camera.PinholeCameraIntrinsic(
             width=width,
             height=height,
@@ -224,10 +219,10 @@ class RGBDToPointCloud:
             cy=intrinsics.get('cy', height/2)
         )
         
-        # 6. 生成点云
+        # 生成点云
         pcd = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd, intrinsic)
         
-        # 7. 应用有效性掩码过滤
+        # 应用有效性掩码过滤
         points = np.asarray(pcd.points)
         colors = np.asarray(pcd.colors)
         
@@ -238,7 +233,7 @@ class RGBDToPointCloud:
         pcd.points = o3d.utility.Vector3dVector(filtered_points)
         pcd.colors = o3d.utility.Vector3dVector(filtered_colors)
         
-        # 8. 体素下采样（可选）
+        # 体素下采样
         if self.voxel_size:
             pcd = pcd.voxel_down_sample(self.voxel_size)
         
@@ -278,37 +273,28 @@ class RGBDToPointCloud:
     def save_pointcloud(
         self,
         pcd: o3d.geometry.PointCloud,
-        output_path: str,
-        format: str = 'pcd'
+        output_path: str
     ):
         """
-        保存点云到文件
+        保存点云为PLY格式
         
         Args:
             pcd: Open3D点云对象
             output_path: 输出文件路径
-            format: 文件格式 ('pcd' 或 'ply')
         """
         # ===== 添加代码标记 - 保存点云 =====
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
-        if format.lower() == 'ply':
-            # 保存为PLY格式（包含颜色和法向量）
-            o3d.io.write_point_cloud(str(output_path), pcd)
-            print(f"  ✓ 点云已保存: {output_path} ({len(pcd.points)} 点)")
-        else:  # 'pcd'
-            # 保存为PCD格式
-            o3d.io.write_point_cloud(str(output_path), pcd)
-            print(f"  ✓ 点云已保存: {output_path} ({len(pcd.points)} 点)")
+        # 保存为PLY格式（包含颜色和法向量）
+        o3d.io.write_point_cloud(str(output_path), pcd)
+        print(f"  ✓ 点云已保存: {output_path} ({len(pcd.points)} 点)")
     
     def process_single_mcap(
         self,
         mcap_path: str,
         output_dir: str,
-        calibration_path: Optional[str] = None,
-        fusion: bool = False,
-        format: str = 'pcd'
+        calibration_path: str
     ):
         """
         处理单个MCAP文件
@@ -316,101 +302,55 @@ class RGBDToPointCloud:
         Args:
             mcap_path: MCAP文件路径
             output_dir: 输出目录
-            calibration_path: 标定文件路径（用于双相机融合）
-            fusion: 是否融合双相机点云
-            format: 输出格式 ('pcd' 或 'ply')
+            calibration_path: 标定文件路径（必需）
         """
         # 读取MCAP数据
         data = self.read_mcap_file(mcap_path)
         
-        # ===== 添加代码标记 - 处理单个MCAP =====
+        print(f"\n[2/3] 转换为点云（双相机融合模式）...")
         
+        # 读取标定结果
+        with open(calibration_path, 'r') as f:
+            calib_data = yaml.safe_load(f)
+        
+        T_2_1 = np.array(calib_data['extrinsics']['transformation_matrix'])
+        
+        # 获取两个相机的数据
+        cameras = list(set([item['camera'] for item in data['rgb']]))
+        if len(cameras) < 2:
+            raise ValueError(f"需要双相机，但只找到 {len(cameras)} 个相机")
+        
+        camera1 = cameras[0]
+        camera2 = cameras[1]
+        
+        # 获取RGB和深度
+        rgb1 = next(r for r in data['rgb'] if r['camera'] == camera1)['image']
+        depth1 = next(d for d in data['depth'] if d['camera'] == camera1)['image']
+        
+        rgb2 = next(r for r in data['rgb'] if r['camera'] == camera2)['image']
+        depth2 = next(d for d in data['depth'] if d['camera'] == camera2)['image']
+        
+        # 获取相机内参
+        intrinsics1 = data['intrinsics'].get(camera1, {})
+        intrinsics2 = data['intrinsics'].get(camera2, {})
+        
+        # 转换为点云
+        pcd1 = self.rgbd_to_pointcloud(rgb1, depth1, intrinsics1)
+        pcd2 = self.rgbd_to_pointcloud(rgb2, depth2, intrinsics2)
+        
+        print(f"  点云1 ({camera1}): {len(pcd1.points)} 点")
+        print(f"  点云2 ({camera2}): {len(pcd2.points)} 点")
+        
+        # 融合
+        fused_pcd = self.fuse_pointclouds(pcd1, pcd2, T_2_1)
+        print(f"  融合后: {len(fused_pcd.points)} 点")
+        
+        # 保存（PLY格式）
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        
         mcap_name = Path(mcap_path).stem
-        
-        # 检查是否为双相机模式
-        num_cameras = len(set([item['camera'] for item in data['rgb']]))
-        
-        if num_cameras == 1 or not fusion:
-            # 单相机处理
-            print(f"\n[2/3] 转换为点云（单相机模式）...")
-            
-            # 配对RGB和深度图
-            for rgb_data in data['rgb']:
-                camera = rgb_data['camera']
-                rgb = rgb_data['image']
-                
-                # 查找对应的深度图
-                depth_data = next(
-                    (d for d in data['depth'] if d['camera'] == camera),
-                    None
-                )
-                if depth_data is None:
-                    print(f"  ⚠ 未找到 {camera} 的深度图，跳过")
-                    continue
-                
-                depth = depth_data['image']
-                
-                # 获取相机内参
-                intrinsics = data['intrinsics'].get(camera, {
-                    'fx': 615.0, 'fy': 615.0,
-                    'cx': rgb.shape[1]/2, 'cy': rgb.shape[0]/2
-                })
-                
-                # 转换为点云
-                pcd = self.rgbd_to_pointcloud(rgb, depth, intrinsics)
-                
-                # 保存
-                output_file = output_dir / f"{mcap_name}_{camera}.{format}"
-                self.save_pointcloud(pcd, str(output_file), format)
-        
-        elif num_cameras >= 2 and fusion:
-            # 双相机融合处理
-            print(f"\n[2/3] 转换为点云（双相机融合模式）...")
-            
-            # 读取标定结果
-            if calibration_path is None:
-                print("  ⚠ 未提供标定文件，无法融合。请使用 --calibration 参数")
-                return
-            
-            with open(calibration_path, 'r') as f:
-                calib_data = yaml.safe_load(f)
-            
-            T_2_1 = np.array(calib_data['extrinsics']['transformation_matrix'])
-            
-            # 处理每对相机
-            cameras = list(set([item['camera'] for item in data['rgb']]))
-            if len(cameras) >= 2:
-                camera1 = cameras[0]
-                camera2 = cameras[1]
-                
-                # 获取RGB和深度
-                rgb1 = next(r for r in data['rgb'] if r['camera'] == camera1)['image']
-                depth1 = next(d for d in data['depth'] if d['camera'] == camera1)['image']
-                
-                rgb2 = next(r for r in data['rgb'] if r['camera'] == camera2)['image']
-                depth2 = next(d for d in data['depth'] if d['camera'] == camera2)['image']
-                
-                # 转换为点云
-                intrinsics1 = data['intrinsics'].get(camera1, {})
-                intrinsics2 = data['intrinsics'].get(camera2, {})
-                
-                pcd1 = self.rgbd_to_pointcloud(rgb1, depth1, intrinsics1)
-                pcd2 = self.rgbd_to_pointcloud(rgb2, depth2, intrinsics2)
-                
-                print(f"  点云1: {len(pcd1.points)} 点")
-                print(f"  点云2: {len(pcd2.points)} 点")
-                
-                # 融合
-                fused_pcd = self.fuse_pointclouds(pcd1, pcd2, T_2_1)
-                
-                print(f"  融合后: {len(fused_pcd.points)} 点")
-                
-                # 保存
-                output_file = output_dir / f"{mcap_name}_fused.{format}"
-                self.save_pointcloud(fused_pcd, str(output_file), format)
+        output_file = output_dir / f"{mcap_name}_fused.ply"
+        self.save_pointcloud(fused_pcd, str(output_file))
         
         print(f"\n[3/3] 完成！")
         print(f"  输出目录: {output_dir}")
@@ -423,25 +363,22 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用示例:
-  # 单个MCAP文件（单相机）
-  python rgbd_to_pointcloud.py --mcap data/0.mcap --output pointclouds/
-  
   # 单个MCAP文件（双相机融合）
   python rgbd_to_pointcloud.py \\
       --mcap data/0.mcap \\
-      --output pointclouds/ \\
       --calibration calibration.yaml \\
-      --fusion
+      --output pointclouds/
   
   # 批量处理（目录）
   python rgbd_to_pointcloud.py \\
       --mcap-dir dataset/ \\
-      --output pointclouds/ \\
-      --format ply
+      --calibration calibration.yaml \\
+      --output pointclouds/
   
   # 指定体素下采样
   python rgbd_to_pointcloud.py \\
       --mcap data/0.mcap \\
+      --calibration calibration.yaml \\
       --output pointclouds/ \\
       --voxel-size 0.005  # 5mm体素
         """
@@ -451,14 +388,10 @@ def main():
                        help='单个MCAP文件路径')
     parser.add_argument('--mcap-dir', type=str,
                        help='MCAP文件目录（用于批量处理）')
+    parser.add_argument('--calibration', type=str, required=True,
+                       help='相机标定文件路径（必需）')
     parser.add_argument('--output', type=str, required=True,
                        help='输出目录')
-    parser.add_argument('--calibration', type=str,
-                       help='相机标定文件路径（用于双相机融合）')
-    parser.add_argument('--fusion', action='store_true',
-                       help='启用双相机点云融合')
-    parser.add_argument('--format', type=str, choices=['pcd', 'ply'], default='pcd',
-                       help='输出格式（pcd或ply），默认: pcd')
     parser.add_argument('--depth-scale', type=float, default=0.001,
                        help='深度值缩放因子（RealSense为0.001），默认: 0.001')
     parser.add_argument('--depth-min', type=float, default=0.1,
@@ -491,9 +424,7 @@ def main():
             converter.process_single_mcap(
                 mcap_path=args.mcap,
                 output_dir=args.output,
-                calibration_path=args.calibration,
-                fusion=args.fusion,
-                format=args.format
+                calibration_path=args.calibration
             )
         
         else:  # args.mcap_dir
@@ -508,9 +439,7 @@ def main():
                     converter.process_single_mcap(
                         mcap_path=str(mcap_file),
                         output_dir=args.output,
-                        calibration_path=args.calibration,
-                        fusion=args.fusion,
-                        format=args.format
+                        calibration_path=args.calibration
                     )
                 except Exception as e:
                     print(f"\n  ✗ 处理 {mcap_file} 失败: {e}")
