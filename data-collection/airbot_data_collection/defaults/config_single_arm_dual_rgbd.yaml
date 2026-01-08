@@ -120,8 +120,9 @@ managers:
   - ''
 
 # ===== 采样限制配置 =====
+# 自动保存：第 1 帧 RGBD（后续转为物体点云） + 最后 1 帧关节角（目标位姿）
 sample_limit:
-  size: 1           # 每轮最大采样帧数（即每次按Space到再次按Space之间最多采集1帧）
+  size: 1000            # 每次按 Space 采集的最大帧数
   start_round: -1    # 起始轮次（-1表示自动检测已有数据）
   max_rounds: 0      # 最大轮次数（0表示不限制）
 
@@ -130,6 +131,10 @@ sampler:
   name: airbot_mcap_sampler
   param:
     _target_: airbot_data_collection.airbot.samplers.mcap_sampler.AIRBOTMcapDataSampler
+    
+    # 启用该参数，则只保存第 1 帧 RGBD 和最后 1 帧关节角
+    # 其他任务令此项为 false 或删除此参数（默认false）
+    filter_first_last_frame: true
     
     # 任务信息（用于数据集元数据）
     task_info:
