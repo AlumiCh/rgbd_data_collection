@@ -194,8 +194,16 @@ class AIRBOTMcapDataSampler(DataSampler):
                 filtered_data[key] = values
                 self.get_logger().debug(f"  {key}: 保留所有帧")
         
-        # 重新构建log_stamps: [第1帧的时间戳, 最后1帧的时间戳]
-        filtered_data["log_stamps"] = [log_stamps[0], log_stamps[-1]]
+        # 重新构建log_stamps
+        # 注意: 所有被过滤的数据(color, depth, joint)长度都变成了1。
+        # 为了满足 _add_messages 中的断言 assert len(log_stamps) == len(values)，
+        # log_stamps 也必须相应调整为长度 1。
+        # 虽然关节角是取自最后一帧，但这里统一使用第 0 帧的 log_time作为记录时间。
+        # 数据的真实生成时间(publish_time)保存在各条数据的't'字段中，是准确的。
+        if log_stamps:
+            filtered_data["log_stamps"] = [log_stamps[0]]
+        else:
+            filtered_data["log_stamps"] = []
         
         return filtered_data
     # ========== 可选功能：保留第 1 帧的 RGBD 以及最后 1 帧的机械臂关节角 END ==========
