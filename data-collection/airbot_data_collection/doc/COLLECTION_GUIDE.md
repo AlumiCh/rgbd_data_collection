@@ -28,7 +28,7 @@
 
 *   **运行命令**:
     ```bash
-    python main.py --path defaults/config_single_arm_dual_rgbd.yaml --dataset.directory "data/task_name_here"
+    python main.py --path defaults/config_single_arm_dual_rgbd.yaml --dataset.directory data/task_name_here
     ```
 
 *   **关键参数说明**:
