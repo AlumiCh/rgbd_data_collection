@@ -56,10 +56,10 @@ python scripts/data_convert/mcap_to_dataset.py \
 
 ```bash
 python scripts/data_convert/mcap_to_dataset.py \
-  --mcap-dir data/pick_coke_can/ \
-  --calibration calibration_result.yaml \
-  --pointcloud-output dataset/v1/pcd/ \
-  --joints-output dataset/v1/json/ \
+  --mcap-dir /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/data/data/test_20260110_03/ \
+  --calibration /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/scripts/dual_camera_calibration.yaml \
+  --pointcloud-output /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/data/data/test_20260110_03_pcd \
+  --joints-output /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/data/data/test_20260110_03_joints \
   --voxel-size 0.005 \
   --depth-min 0.2 \
   --depth-max 1.5

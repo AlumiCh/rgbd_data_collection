@@ -16,8 +16,8 @@ python scripts/visualize_sample.py --pointcloud pointclouds/demo_0_fused.ply
 
 ```bash
 python scripts/visualize_sample.py \
-    --pointcloud my_data/pcd/demo_0.ply \
-    --joints my_data/json/demo_0.json
+    --pointcloud /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/data/data/test_20260110_03_pcd/0_fused.ply \
+    --joints /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/data/data/test_20260110_03_joints/0.json
 ```
 
 ---
