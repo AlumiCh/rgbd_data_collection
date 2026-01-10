@@ -132,10 +132,6 @@ sampler:
   param:
     _target_: airbot_data_collection.airbot.samplers.mcap_sampler.AIRBOTMcapDataSampler
     
-    # 启用该参数，则只保存第 1 帧 RGBD 和最后 1 帧关节角
-    # 其他任务令此项为 false 或删除此参数（默认false）
-    filter_first_last_frame: true
-    
     # 任务信息（用于数据集元数据）
     task_info:
       task_name: "single_arm_grasp"          # 任务名称
@@ -155,7 +151,7 @@ sampler:
     
     # 数据保存格式配置
     save_type:
-      color: "h264"   # RGB图像编码：h264（压缩）或 raw（无压缩）或 jpeg
+      color: "jpeg"   # RGB图像编码：h264（压缩）或 raw（无压缩）或 jpeg
       depth: "raw"    # 深度图编码：raw（16位无损）
     
     # 云端上传配置（默认关闭）

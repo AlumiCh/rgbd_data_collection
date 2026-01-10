@@ -37,6 +37,18 @@ import re
 from mcap.reader import make_reader
 import struct
 from tqdm import tqdm
+try:
+    import cv2
+except ImportError:
+    print("Warning: OpenCV not installed")
+    cv2 = None
+
+# 用于 H.264 解码的库
+try:
+    import av
+except ImportError:
+    print("Warning: av package not installed. Video decoding might fail.")
+    av = None
 
 # 导入FlatBuffer schemas用于解码
 try:
@@ -109,42 +121,123 @@ class RGBDToPointCloud:
         }
         
         # ===== 读取MCAP数据 =====
+        # 针对 H.264 视频流（Attachment）做额外处理
+        # 1. 扫描所有 Attachment，如果是视频，准备解码
+        # 2. 扫描所有 Message，如果是图片/深度图，直接解码
+        
+        # 视频解码器缓存: {camera_name: av.Container}
+        video_containers = {}
+        # 为了视频解码的时间戳对齐，我们需要记录每一帧的解码顺序
+        video_frame_indices = {} 
+
         with open(mcap_path, 'rb') as f:
             reader = make_reader(f)
             
-            # 读取所有通道和消息
+            # --- 阶段 1: 处理 Attachment (H.264视频) ---
+            # Airbot sampler 将 H.264 存为 Attachment，名称通常是 topic 名
+            for attachment in reader.iter_attachments():
+                name = attachment.name # e.g. "camera_front/color/image_raw"
+                media_type = attachment.media_type # e.g. "video/mp4" or "video/h264" (custom)
+                
+                # 检查是否是我们关心的视频流
+                if ('/color/' in name or '/rgb/' in name) and ('image' in name):
+                    if av is None:
+                        continue
+                        
+                    camera_name = self._extract_camera_name(name)
+                    print(f"  发现视频流附件: {name} (Camera: {camera_name})")
+                    
+                    try:
+                        # PyAV 文档建议使用 open(file) 但这里数据是在内存bytes里
+                         # 使用 BytesIO 包装
+                        import io
+                        video_stream = io.BytesIO(attachment.data)
+                        container = av.open(video_stream)
+                        
+                        # 遍历视频流的所有帧
+                        # 我们只需要第 1 帧
+                        for i, frame in enumerate(container.decode(video=0)):
+                            if i == 0:
+                                # 转换为 numpy array (RGB)
+                                img = frame.to_ndarray(format='rgb24')
+                                data['rgb'].append({
+                                    'camera': camera_name,
+                                    'image': img,
+                                    'timestamp': attachment.log_time # 视频流作为一个整体只有一个时间戳，我们用它近似
+                                })
+                                if camera_name not in data['camera_names']:
+                                   data['camera_names'].append(camera_name)
+                                break # 只要第 1 帧
+                    except Exception as e:
+                        print(f"  ❌ 解码视频附件失败 {name}: {e}")
+
+            # --- 阶段 2: 处理 Message (Images, Depth, Joints) ---
             for schema, channel, message in reader.iter_messages():
                 topic = channel.topic
                 schema_name = schema.name if schema else "unknown"
                 
-                # 提取RGB图像
+                # 提取RGB图像 (如果是作为 Message 存储的)
                 # 放宽匹配条件，兼容 'rgb' 或 'color'
                 if ('/color/' in topic or '/rgb/' in topic) and 'image' in topic:
-                    rgb_data = self._decode_image_message(message, schema_name)
-                    if rgb_data is not None:
-                        camera_name = self._extract_camera_name(topic)
-                        data['rgb'].append({
-                            'camera': camera_name,
-                            'image': rgb_data,
-                            'timestamp': message.publish_time
-                        })
-                        if camera_name not in data['camera_names']:
-                            data['camera_names'].append(camera_name)
+                    # 如果之前从未从视频流中读到过这个相机的数据，才尝试读 Message
+                    # 避免重复
+                    camera_name = self._extract_camera_name(topic)
+                    has_video_data = any(x['camera'] == camera_name for x in data['rgb'])
+                    
+                    # 只取第一帧的 Message (通过检查该相机是否已有数据)
+                    if not has_video_data:
+                        rgb_data = self._decode_image_message(message, schema_name)
+                        if rgb_data is not None:
+                            data['rgb'].append({
+                                'camera': camera_name,
+                                'image': rgb_data,
+                                'timestamp': message.publish_time
+                            })
+                            if camera_name not in data['camera_names']:
+                                data['camera_names'].append(camera_name)
                 
                 # 提取深度图
                 elif 'depth' in topic and 'image' in topic:
-                    depth_data = self._decode_depth_message(message, schema_name)
-                    if depth_data is not None:
-                        camera_name = self._extract_camera_name(topic)
-                        data['depth'].append({
-                            'camera': camera_name,
-                            'image': depth_data,
-                            'timestamp': message.publish_time
-                        })
-                        # 确保通过深度图也能发现相机 (修复找不到相机的Bug)
-                        if camera_name not in data['camera_names']:
-                            data['camera_names'].append(camera_name)
+                    # 我们需要所有相机的第 1 帧深度图
+                    # 但这里的消息是乱序的 (交错的)
+                    # 策略: 为每个相机只存第 1 帧
+                    camera_name = self._extract_camera_name(topic)
+                    
+                    # 检查该相机是否已经有深度图了
+                    has_depth_data = any(x['camera'] == camera_name for x in data['depth'])
+                    
+                    if not has_depth_data:
+                        depth_data = self._decode_depth_message(message, schema_name)
+                        if depth_data is not None:
+                            data['depth'].append({
+                                'camera': camera_name,
+                                'image': depth_data,
+                                'timestamp': message.publish_time
+                            })
+                            # 确保通过深度图也能发现相机 (修复找不到相机的Bug)
+                            if camera_name not in data['camera_names']:
+                                data['camera_names'].append(camera_name)
+                
+                # 提取关节角 (Joint State)
+                elif 'joint_states' in topic or 'joint' in topic:
+                    # 关节角我们需要 最后一帧
+                    # 这里的策略是：全部读入，最后只取最后一个
+                    # 为了节省内存，我们可以只维护一个 "current_last"
+                    joints = self._decode_joint_state(message, schema_name)
+                    if joints:
+                        # 临时存储在 metadata 中，等最后替换
+                        # 格式: list of joints
+                        if 'temp_joints' not in data:
+                            data['temp_joints'] = []
+                        data['temp_joints'].append(joints)
             
+            # 处理关节角：只保留最后一个
+            if 'temp_joints' in data and len(data['temp_joints']) > 0:
+                data['joints'] = data['temp_joints'][-1]
+                del data['temp_joints'] # 清理临时数据
+            else:
+                data['joints'] = None
+
             # 读取元数据（相机内参）
             for record in reader.iter_metadata():
                 metadata_name = record.name
@@ -166,18 +259,39 @@ class RGBDToPointCloud:
         if len(data['depth']) > 0 and len(data['rgb']) == 0:
             print("\n" + "!" * 60)
             print("警告: 检测到深度图但未检测到RGB图像！")
-            print("原因可能是采集配置中使用了 H.264 视频流 (save_type.color='h264')。")
-            print("本脚本目前仅支持以消息形式存储的图像 (jpeg/raw)。")
-            print("解决办法: 请在配置文件 config_single_arm_dual_rgbd.yaml 中设置:")
-            print("    sampler:")
-            print("      param:")
-            print("        save_type:")
-            print("          color: jpeg")
-            print("并重新采集数据。")
+            if av is None:
+                print("可能原因: RGB数据存储为 H.264 视频流，但未安装 'av' 库进行解码。")
+                print("请运行: pip install av")
+            else:
+                print("可能原因: 无法找到或解码 H.264 视频流附件。")
             print("!" * 60 + "\n")
         
         return data
     
+    def _decode_joint_state(self, message, schema_name: str) -> Optional[List[float]]:
+        """解码关节角消息"""
+        try:
+             # 支持 JSON 格式 (Airbot 默认)
+            if schema_name == "json":
+                json_data = json.loads(message.data.decode('utf-8'))
+                # 尝试适配不同的 JSON 结构
+                # Case 1: 直接是数组 [j1, j2, ...]
+                if isinstance(json_data, list):
+                    return json_data
+                # Case 2: 字典且含有 'position'
+                elif isinstance(json_data, dict) and 'position' in json_data:
+                    return json_data['position']
+                elif isinstance(json_data, dict) and 'data' in json_data:
+                    # 有时候可能是 data: [..]
+                     return json_data['data']
+
+            # 支持 ROS JointState 风格的 FlatBuffer (如果有的话)
+            # 目前主要通过 JSON
+        except Exception as e:
+            # print(f"解码关节角失败: {e}")
+            pass
+        return None
+
     def _extract_camera_name(self, topic: str) -> str:
         """从主题名称中提取相机名称"""
         # 示例: "camera_front_top/color/image_raw" -> "camera_front_top"
