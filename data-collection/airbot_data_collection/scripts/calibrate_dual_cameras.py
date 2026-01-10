@@ -73,6 +73,7 @@ class DualCameraCalibrator:
         self.R = None  # 旋转矩阵 (3x3)
         self.t = None  # 平移向量 (3x1)
         self.T = None  # 变换矩阵 (4x4)
+        self.reprojection_error = 0.0
         
         # RealSense管道
         self.pipeline1 = None
@@ -321,6 +322,7 @@ class DualCameraCalibrator:
             self.T = np.eye(4)
             self.T[:3, :3] = R
             self.T[:3, 3] = t.squeeze()
+            self.reprojection_error = float(ret)
             
             print(f"  ✓ 标定成功！重投影误差: {ret:.4f} 像素")
             print(f"\n  旋转矩阵 R:")
@@ -391,7 +393,7 @@ class DualCameraCalibrator:
             },
             'statistics': {
                 'num_image_pairs': len(self.camera1_images),
-                'reprojection_error_px': float(ret) if 'ret' in locals() else 0.0
+                'reprojection_error_px': self.reprojection_error
             }
         }
         
@@ -405,7 +407,7 @@ class DualCameraCalibrator:
         print("\n使用说明：")
         print(f"  1. 标定文件: {output_file}")
         print(f"  2. 在点云融合时，使用 'transformation_matrix' 将相机2的点云变换到相机1坐标系")
-        print(f"  3. 变换公式: P1 = T_2_1 @ P2 （P1为相机1坐标，P2为相机2坐标）")
+        print(f"  3. 变换公式: P1 = inv(T_2_1) @ P2 （P1为相机1坐标，P2为相机2坐标）")
     
     def _rotation_matrix_to_euler(self, R: np.ndarray) -> np.ndarray:
         """
