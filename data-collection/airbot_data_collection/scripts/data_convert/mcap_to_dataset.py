@@ -137,24 +137,15 @@ class RGBDToPointCloud:
             # Airbot sampler 将 H.264 存为 Attachment，名称通常是 topic 名
             for attachment in reader.iter_attachments():
                 name = attachment.name # e.g. "camera_front/color/image_raw"
-                print(f"DEBUG: Found attachment: {name}") 
+                media_type = attachment.media_type # e.g. "video/mp4" or "video/h264" (custom)
                 
-                # 兼容性处理：有些 Topic 包含 /color/ 但不包含 image
                 # 检查是否是我们关心的视频流
-                is_video = False
-                if '/color/' in name or '/rgb/' in name:
-                    is_video = True
-                
-                # 有些 Topic 名称可能只是 "camera_name/color"
-                if is_video:
+                if ('/color/' in name or '/rgb/' in name) and ('image' in name):
                     if av is None:
-                        print(f"Error: 发现视频附件 {name}，但 'av' 库未安装，无法解码。请 pip install av")
                         continue
                         
                     camera_name = self._extract_camera_name(name)
                     print(f"  发现视频流附件: {name} (Camera: {camera_name})")
-
-
                     
                     try:
                         # PyAV 文档建议使用 open(file) 但这里数据是在内存bytes里
