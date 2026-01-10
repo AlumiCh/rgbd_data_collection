@@ -28,9 +28,7 @@
 
 *   **运行命令**:
     ```bash
-    python main.py --config-name config_single_arm_dual_rgbd \
-           dataset.directory="data/task_name_here" \
-           sample_limit.size=1000
+    python main.py --path defaults/config_single_arm_dual_rgbd.yaml --dataset.directory "data/task_name_here"
     ```
 
 *   **关键参数说明**:
