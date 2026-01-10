@@ -7,13 +7,17 @@ MCAP 数据处理工具
 ============================================================
 
 [1/4] 读取 MCAP 文件: /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/data/data/test_20260110_01/2.mcap
+  读取完成
+  - RGB 图像: 0 帧
+  - 深度图: 544 帧
+  - 相机: 
 
-错误: 'SeekingReader' object has no attribute 'metadata'
+[2/4] 转换为点云（双相机融合模式）...
+
+错误: 需要双相机，但只找到 0 个相机: []
 Traceback (most recent call last):
-  File "/home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/scripts/data_convert/mcap_to_dataset.py", line 711, in main
+  File "/home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/scripts/data_convert/mcap_to_dataset.py", line 714, in main
     converter.process_single_mcap(
-  File "/home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/scripts/data_convert/mcap_to_dataset.py", line 554, in process_single_mcap
-    data = self.read_mcap_file(mcap_path)
-  File "/home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/scripts/data_convert/mcap_to_dataset.py", line 145, in read_mcap_file
-    for metadata_name, metadata_dict in reader.metadata.items():
-AttributeError: 'SeekingReader' object has no attribute 'metadata'
+  File "/home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/scripts/data_convert/mcap_to_dataset.py", line 570, in process_single_mcap
+    raise ValueError(f"需要双相机，但只找到 {len(cameras)} 个相机: {cameras}")
+ValueError: 需要双相机，但只找到 0 个相机: []
