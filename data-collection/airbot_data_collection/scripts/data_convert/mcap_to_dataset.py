@@ -118,7 +118,8 @@ class RGBDToPointCloud:
                 schema_name = schema.name if schema else "unknown"
                 
                 # 提取RGB图像
-                if '/color/' in topic and 'image' in topic:
+                # 放宽匹配条件，兼容 'rgb' 或 'color'
+                if ('/color/' in topic or '/rgb/' in topic) and 'image' in topic:
                     rgb_data = self._decode_image_message(message, schema_name)
                     if rgb_data is not None:
                         camera_name = self._extract_camera_name(topic)
@@ -140,6 +141,9 @@ class RGBDToPointCloud:
                             'image': depth_data,
                             'timestamp': message.publish_time
                         })
+                        # 确保通过深度图也能发现相机 (修复找不到相机的Bug)
+                        if camera_name not in data['camera_names']:
+                            data['camera_names'].append(camera_name)
             
             # 读取元数据（相机内参）
             for record in reader.iter_metadata():
@@ -157,6 +161,20 @@ class RGBDToPointCloud:
         print(f"  - RGB 图像: {len(data['rgb'])} 帧")
         print(f"  - 深度图: {len(data['depth'])} 帧")
         print(f"  - 相机: {', '.join(data['camera_names'])}")
+
+        # 检查可能的配置问题
+        if len(data['depth']) > 0 and len(data['rgb']) == 0:
+            print("\n" + "!" * 60)
+            print("警告: 检测到深度图但未检测到RGB图像！")
+            print("原因可能是采集配置中使用了 H.264 视频流 (save_type.color='h264')。")
+            print("本脚本目前仅支持以消息形式存储的图像 (jpeg/raw)。")
+            print("解决办法: 请在配置文件 config_single_arm_dual_rgbd.yaml 中设置:")
+            print("    sampler:")
+            print("      param:")
+            print("        save_type:")
+            print("          color: jpeg")
+            print("并重新采集数据。")
+            print("!" * 60 + "\n")
         
         return data
     
