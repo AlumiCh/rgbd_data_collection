@@ -3,7 +3,6 @@ __pycache__/
 data/
 build/
 .vscode/
-*.mcap
 *.bson
 *.json
 *.txt
