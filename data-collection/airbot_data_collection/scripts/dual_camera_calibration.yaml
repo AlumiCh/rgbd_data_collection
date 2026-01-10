@@ -1,0 +1,80 @@
+board_config:
+  size:
+  - 8
+  - 5
+  square_size_m: 0.025
+calibration_date: '2026-01-10 16:55:13'
+camera1:
+  intrinsics:
+    cx: 317.82781982421875
+    cy: 250.60684204101562
+    distortion_coeffs:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    distortion_model: inverse_brown_conrady
+    fx: 607.185302734375
+    fy: 606.7373046875
+    height: 480
+    width: 640
+  role: reference
+  serial_number: '250122073394'
+camera2:
+  intrinsics:
+    cx: 318.97784423828125
+    cy: 255.83656311035156
+    distortion_coeffs:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    distortion_model: inverse_brown_conrady
+    fx: 605.8484497070312
+    fy: 605.7186279296875
+    height: 480
+    width: 640
+  role: secondary
+  serial_number: '243522071790'
+extrinsics:
+  description: Transformation from camera1 to camera2 (T_2_1)
+  rotation_euler_deg:
+  - 74.581403956238
+  - 77.21439637468413
+  - 152.8529323195448
+  rotation_matrix:
+  - - -0.19692429972073983
+    - -0.9578524570163237
+    - 0.20913988325350086
+  - - 0.10097547357667158
+    - 0.1923676781123136
+    - 0.9761140456696874
+  - - -0.9752049907150103
+    - 0.21333857364637365
+    - 0.05883773516262991
+  transformation_matrix:
+  - - -0.19692429972073983
+    - -0.9578524570163237
+    - 0.20913988325350086
+    - -0.1738673609974801
+  - - 0.10097547357667158
+    - 0.1923676781123136
+    - 0.9761140456696874
+    - -0.6428275861497845
+  - - -0.9752049907150103
+    - 0.21333857364637365
+    - 0.05883773516262991
+    - 0.6718330481141916
+  - - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+  translation_vector:
+  - -0.1738673609974801
+  - -0.6428275861497845
+  - 0.6718330481141916
+statistics:
+  num_image_pairs: 15
+  reprojection_error_px: 0.0
