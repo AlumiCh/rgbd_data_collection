@@ -176,12 +176,21 @@ class DualCameraCalibrator:
         
         # ===== 图像采集主循环 =====
         while not self.should_exit:
-            # 获取两个相机的帧
-            frames1 = self.pipeline1.wait_for_frames()
-            frames2 = self.pipeline2.wait_for_frames()
-            
-            color_frame1 = frames1.get_color_frame()
-            color_frame2 = frames2.get_color_frame()
+            try:
+                # 获取两个相机的帧
+                frames1 = self.pipeline1.wait_for_frames(10000)  # 增加超时到10秒
+                frames2 = self.pipeline2.wait_for_frames(10000)
+                
+                color_frame1 = frames1.get_color_frame()
+                color_frame2 = frames2.get_color_frame()
+            except RuntimeError as e:
+                print(f"\n  ⚠ 帧获取超时: {e}")
+                if captured_count >= min_pairs:
+                    print(f"  已达到最小采集数量({min_pairs})，使用现有图像完成标定。")
+                    break
+                else:
+                    print("  正在尝试重新获取...")
+                    continue
             
             if not color_frame1 or not color_frame2:
                 continue

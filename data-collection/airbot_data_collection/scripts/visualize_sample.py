@@ -187,10 +187,35 @@ class SampleVisualizer:
             try:
                 with open(self.joints_path, 'r') as f:
                     data = json.load(f)
-                    self.joint_angles = np.array(data, dtype=np.float32)
+                    
+                    # 适配新的 JSON 结构 (含 topics 和 metadata)
+                    if isinstance(data, dict) and 'topics' in data:
+                        # 优先寻找 follow arm 和 eef
+                        arm_topic = next((t for t in data['topics'] if 'follow' in t and '/arm/' in t), 
+                                       next((t for t in data['topics'] if '/arm/' in t), None))
+                        eef_topic = next((t for t in data['topics'] if 'follow' in t and '/eef/' in t), 
+                                       next((t for t in data['topics'] if '/eef/' in t), None))
+                        
+                        if arm_topic:
+                            arm_pos = data['topics'][arm_topic]
+                            if eef_topic:
+                                eef_pos = data['topics'][eef_topic]
+                                self.joint_angles = np.array(list(arm_pos) + list(eef_pos), dtype=np.float32)
+                            else:
+                                self.joint_angles = np.array(arm_pos, dtype=np.float32)
+                        else:
+                            # 如果没有明确的 arm/eef，尝试取第一个 topic 的数据
+                            first_topic = next(iter(data['topics']))
+                            self.joint_angles = np.array(data['topics'][first_topic], dtype=np.float32)
+                    else:
+                        # 兼容旧的简单数组格式
+                        self.joint_angles = np.array(data, dtype=np.float32)
+                        
                     print(f"  ✓ 关节角加载完成: {len(self.joint_angles)} 维")
             except Exception as e:
                 print(f"  ⚠ 关节角加载失败: {e}")
+                import traceback
+                traceback.print_exc()
         else:
             print(f"  ⚠ 关节角文件不存在: {self.joints_path}")
         
