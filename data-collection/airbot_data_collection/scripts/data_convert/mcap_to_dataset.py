@@ -295,7 +295,8 @@ class RGBDToPointCloud:
     def _extract_camera_name(self, topic: str) -> str:
         """从主题名称中提取相机名称"""
         # 示例: "camera_front_top/color/image_raw" -> "camera_front_top"
-        parts = topic.split('/')
+        clean_topic = topic.lstrip('/')
+        parts = clean_topic.split('/')
         if len(parts) > 0:
             return parts[0]
         return "unknown"
