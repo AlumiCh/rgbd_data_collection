@@ -473,7 +473,7 @@ class RGBDToPointCloud:
         self,
         pcd1: o3d.geometry.PointCloud,
         pcd2: o3d.geometry.PointCloud,
-        T_2_1: np.ndarray
+        T_ref_source: np.ndarray
     ) -> o3d.geometry.PointCloud:
         """
         融合两个点云到统一坐标系
@@ -481,7 +481,7 @@ class RGBDToPointCloud:
         Args:
             pcd1: 相机1的点云（参考坐标系）
             pcd2: 相机2的点云
-            T_2_1: 从相机1到相机2的4x4变换矩阵
+            T_ref_source: 从相机2(source)到相机1(ref)的4x4变换矩阵
             
         Returns:
             融合后的点云
@@ -490,7 +490,7 @@ class RGBDToPointCloud:
         print("  正在融合两个点云...")
         
         # 将pcd2变换到pcd1坐标系
-        pcd2_transformed = pcd2.transform(T_2_1)
+        pcd2_transformed = pcd2.transform(T_ref_source)
         
         # 合并点云
         fused_pcd = pcd1 + pcd2_transformed
@@ -726,9 +726,17 @@ class RGBDToPointCloud:
         rgb2 = rgb2_list[0]['image']
         depth2 = depth2_list[0]['image']
         
-        # 获取相机内参
-        intrinsics1 = data['intrinsics'].get(camera1)
-        intrinsics2 = data['intrinsics'].get(camera2)
+        # 获取相机内参 (优先使用标定文件中的内参)
+        intrinsics1 = calib_data.get('camera1', {}).get('intrinsics')
+        intrinsics2 = calib_data.get('camera2', {}).get('intrinsics')
+        
+        # 如果标定文件中没有，则从 MCAP 中读取
+        if not intrinsics1:
+            print(f"  ⚠ 标定文件中未找到 camera1 内参，尝试从 MCAP 读取...")
+            intrinsics1 = data['intrinsics'].get(camera1)
+        if not intrinsics2:
+            print(f"  ⚠ 标定文件中未找到 camera2 内参，尝试从 MCAP 读取...")
+            intrinsics2 = data['intrinsics'].get(camera2)
         
         if not intrinsics1:
             raise ValueError(f"相机 {camera1} 没有内参数据")
@@ -746,7 +754,10 @@ class RGBDToPointCloud:
         print(f"  点云2 ({camera2}): {len(pcd2.points)} 点")
         
         # 融合
-        fused_pcd = self.fuse_pointclouds(pcd1, pcd2, T_2_1)
+        # 注意: 标定文件中的 T_2_1 是从相机1到相机2的变换 (P2 = T_2_1 @ P1)
+        # 我们需要将相机2的点云变换到相机1的坐标系，所以使用 T_2_1 的逆矩阵
+        T_1_2 = np.linalg.inv(T_2_1)
+        fused_pcd = self.fuse_pointclouds(pcd1, pcd2, T_1_2)
         print(f"  融合后: {len(fused_pcd.points)} 点")
         
         # 提取并保存关节角
