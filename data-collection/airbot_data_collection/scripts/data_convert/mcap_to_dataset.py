@@ -142,11 +142,14 @@ class RGBDToPointCloud:
                         })
             
             # 读取元数据（相机内参）
-            for metadata_name, metadata_dict in reader.metadata.items():
+            for record in reader.iter_metadata():
+                metadata_name = record.name
+                metadata_dict = record.metadata
                 try:
-                    meta_dict = json.loads(metadata_dict.get('intrinsics', '{}'))
-                    for camera_name, intrinsics in meta_dict.items():
-                        data['intrinsics'][camera_name] = intrinsics
+                    if 'intrinsics' in metadata_dict:
+                        meta_dict = json.loads(metadata_dict.get('intrinsics', '{}'))
+                        for camera_name, intrinsics in meta_dict.items():
+                            data['intrinsics'][camera_name] = intrinsics
                 except:
                     pass
         
