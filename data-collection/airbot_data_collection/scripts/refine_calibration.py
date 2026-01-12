@@ -13,7 +13,7 @@
   - 移动: Q-W (X轴), A-S (Y轴), Z-X (Z轴)
   - 旋转: E-R (Roll), D-F (Pitch), C-V (Yaw)
   - 步长: 1/2 (增加/减小移动步长), 3/4 (增加/减小旋转步长)
-  - 功能: I (执行ICP), Enter (保存到YAML), H (打印帮助)
+  - 功能: I (执行ICP), O (保存到YAML), H (打印帮助)
   - 退出: Esc / Q
 
 日期：2026-01-12
@@ -68,7 +68,7 @@ class CalibrationRefiner:
         print("  旋转 (角):  E/R (Roll), D/F (Pitch), C/V (Yaw)")
         print("  步长控制:   1/2 (移动步长 ±), 3/4 (旋转步长 ±)")
         print("  自动化:     I (执行ICP精修)")
-        print("  保存:       Enter (覆盖保存到YAML)")
+        print("  保存:       O (覆盖保存到YAML)")
         print("  帮助:       H (显示此列表)")
         print("  退出:       Esc / Q")
         print("-" * 40)
@@ -219,7 +219,7 @@ class CalibrationRefiner:
         
         # 功能
         self.vis.register_key_callback(ord('I'), lambda v: self.run_icp())
-        self.vis.register_key_callback(eval("ord('\r')"), lambda v: self.save()) # Enter
+        self.vis.register_key_callback(ord('O'), lambda v: self.save())
         self.vis.register_key_callback(ord('H'), lambda v: self._print_help())
         
         print("\n[可视化] 窗口已打开，请使用键盘进行调整...")
