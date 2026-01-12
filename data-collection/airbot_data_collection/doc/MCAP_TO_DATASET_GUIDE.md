@@ -10,7 +10,9 @@
 
 核心逻辑：
 *   **智能提取**: 自动扫描并解码 H.264 视频附件，仅取**第 1 帧**作为 RGB 数据。
-*   **自动过滤**: 从连续的深度流中仅取**第 1 帧**深度图。
+*   **坐标转换**: 自动计算标定矩阵的逆矩阵，将从相机点云精准变换至主相机坐标系。
+*   **对齐优化**: 支持通过 ICP 算法对场景几何特征进行二次匹配，补偿机械抖动。
+*   **分相机过滤**: 支持为两台相机独立设置深度区间。
 *   **状态锁定**: 从连续的机械臂状态流中仅取**最后 1 帧**关节角。
 
 输出：
@@ -41,6 +43,7 @@
 | `--depth-min-cam2` | `0.1` | 侧相机最小有效深度(米)。小于此距离的点将被过滤。 |
 | `--depth-max-cam2` | `5.0` | 侧相机最大有效深度(米)。大于此距离的点将被过滤。 |
 | `--depth-scale` | `0.001` | 深度图单位换算因子 (RealSense默认毫米，通常无需修改)。 |
+| `--apply-icp` | `False` | 是否开启 ICP 精细化对齐优化。耗时较长但精度更高。 |
 
 ---
 
@@ -49,12 +52,13 @@
 ### 场景A: 抽样检查 (处理单个文件)
 ```bash
 python scripts/data_convert/mcap_to_dataset.py \
-  --mcap /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/data/data/test_20260110_03/0.mcap \
-  --calibration /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/scripts/dual_camera_calibration.yaml \
-  --pointcloud-output /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/data/data/test_20260110_03_pcd \
-  --joints-output /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/data/data/test_20260110_03_joints \
+  --mcap /path/to/data/0.mcap \
+  --calibration /path/to/calibration.yaml \
+  --pointcloud-output /path/to/output_pcd \
+  --joints-output /path/to/output_joints \
   --depth-min-cam1 0.1 --depth-max-cam1 0.8 \
-  --depth-min-cam2 0.1 --depth-max-cam2 0.8
+  --depth-min-cam2 0.1 --depth-max-cam2 0.8 \
+  --apply-icp
 ```
 
 ### 场景B: 制作训练集 (批量+下采样)
@@ -62,13 +66,14 @@ python scripts/data_convert/mcap_to_dataset.py \
 
 ```bash
 python scripts/data_convert/mcap_to_dataset.py \
-  --mcap-dir /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/data/data/test_20260110_03/ \
-  --calibration /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/scripts/dual_camera_calibration.yaml \
-  --pointcloud-output /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/data/data/test_20260110_03_pcd \
-  --joints-output /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/data/data/test_20260110_03_joints \
+  --mcap-dir /path/to/data/ \
+  --calibration /path/to/calibration.yaml \
+  --pointcloud-output /path/to/output_pcd \
+  --joints-output /path/to/output_joints \
   --voxel-size 0.005 \
   --depth-min-cam1 0.1 --depth-max-cam1 0.8 \
-  --depth-min-cam2 0.1 --depth-max-cam2 0.8
+  --depth-min-cam2 0.1 --depth-max-cam2 0.8 \
+  --apply-icp
 ```
 
 ---

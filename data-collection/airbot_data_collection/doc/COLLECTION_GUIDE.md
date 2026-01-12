@@ -57,13 +57,17 @@
            --mcap-dir data/task_name_here/ \
            --calibration calibration_result.yaml \
            --pointcloud-output pointclouds/ \
-           --joints-output joints/
+           --joints-output joints/ \
+           --depth-max-cam1 0.8 --depth-max-cam2 1.2 \
+           --apply-icp
     ```
 
 *   **主要功能**:
-    1.  提取 RGBD 并根据标定文件融合双相机点云。
-    2.  提取最后时刻的机械臂关节角。
-    3.  (可选) 进行体素下采样 (`--voxel-size`) 减小文件体积。
+    1.  提取 RGBD 并根据标定文件融合双相机点云（自动处理外参求逆）。
+    2.  **分相机过滤**: 支持为两台相机设置不同的深度阈值，适应不同安装距离。
+    3.  **ICP 优化**: (可选) 使用点到面 ICP 算法精细化对齐，消除标定误差。
+    4.  提取最后时刻的机械臂关节角。
+    5.  (可选) 进行体素下采样 (`--voxel-size`) 减小文件体积。
 
 *   *详细参数请参考: [MCAP_TO_DATASET_GUIDE.md](./MCAP_TO_DATASET_GUIDE.md)*
 

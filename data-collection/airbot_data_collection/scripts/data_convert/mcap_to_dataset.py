@@ -513,6 +513,64 @@ class RGBDToPointCloud:
         # 保存为PLY格式（包含颜色和法向量）
         o3d.io.write_point_cloud(str(output_path), pcd)
         print(f"  ✓ 点云已保存: {output_path} ({len(pcd.points)} 点)")
+
+    def run_icp_registration(
+        self,
+        source_pcd: o3d.geometry.PointCloud,
+        target_pcd: o3d.geometry.PointCloud,
+        T_init: np.ndarray,
+        threshold: float = 0.05
+    ) -> np.ndarray:
+        """
+        使用ICP算法精细化点云对齐
+        
+        Args:
+            source_pcd: 待变换的点云 (相机2)
+            target_pcd: 参考点云 (相机1)
+            T_init: 初始变换矩阵 (从标定文件获得)
+            threshold: 匹配距离阈值 (米)
+            
+        Returns:
+            优化后的变换矩阵
+        """
+        print(f"  正在执行 ICP 精细化对齐...")
+        
+        # 复制点云以避免修改原始数据
+        source_temp = o3d.geometry.PointCloud(source_pcd)
+        target_temp = o3d.geometry.PointCloud(target_pcd)
+        
+        # 计算法向量 (用于 Point-to-Plane ICP，效果更好)
+        source_temp.estimate_normals(
+            search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
+        target_temp.estimate_normals(
+            search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
+        
+        # 执行 ICP
+        try:
+            # 兼容不同版本的 Open3D
+            if hasattr(o3d, "pipelines"):
+                reg_p2l = o3d.pipelines.registration.registration_icp(
+                    source_temp, target_temp, threshold, T_init,
+                    o3d.pipelines.registration.TransformationEstimationPointToPlane()
+                )
+            else:
+                # 旧版本兼容
+                reg_p2l = o3d.registration.registration_icp(
+                    source_temp, target_temp, threshold, T_init,
+                    o3d.registration.TransformationEstimationPointToPlane()
+                )
+            
+            # 检查评估指标
+            if reg_p2l.fitness < 0.3:
+                print(f"  ⚠ ICP 适应度较低 ({reg_p2l.fitness:.3f})，可能对齐效果不佳，维持原始标定值")
+                return T_init
+            
+            print(f"  ✓ ICP 优化完成: Fitness={reg_p2l.fitness:.4f}, RMSE={reg_p2l.inlier_rmse:.6f}")
+            return reg_p2l.transformation
+            
+        except Exception as e:
+            print(f"  ❌ ICP 运行出错: {e}，将使用原始标定值")
+            return T_init
     
     def extract_joint_angles(self, mcap_path: str) -> Optional[Dict[str, np.ndarray]]:
         """
@@ -676,7 +734,8 @@ class RGBDToPointCloud:
         joints_output_dir: str,
         calibration_path: str,
         depth_threshold1: Optional[Tuple[float, float]] = None,
-        depth_threshold2: Optional[Tuple[float, float]] = None
+        depth_threshold2: Optional[Tuple[float, float]] = None,
+        apply_icp: bool = False
     ):
         """
         处理单个 MCAP 文件
@@ -688,6 +747,7 @@ class RGBDToPointCloud:
             calibration_path: 标定文件路径（必需）
             depth_threshold1: 相机1深度过滤范围
             depth_threshold2: 相机2深度过滤范围
+            apply_icp: 是否应用 ICP 精细化对齐
         """
         # 读取MCAP数据
         data = self.read_mcap_file(mcap_path)
@@ -763,8 +823,13 @@ class RGBDToPointCloud:
         # 融合
         # 注意: 标定文件中的 T_2_1 是从相机1到相机2的变换 (P2 = T_2_1 @ P1)
         # 我们需要将相机2的点云变换到相机1的坐标系，所以使用 T_2_1 的逆矩阵
-        T_1_2 = np.linalg.inv(T_2_1)
-        fused_pcd = self.fuse_pointclouds(pcd1, pcd2, T_1_2)
+        T_1_2_init = np.linalg.inv(T_2_1)
+        
+        T_final = T_1_2_init
+        if apply_icp:
+            T_final = self.run_icp_registration(pcd2, pcd1, T_1_2_init)
+            
+        fused_pcd = self.fuse_pointclouds(pcd1, pcd2, T_final)
         print(f"  融合后: {len(fused_pcd.points)} 点")
         
         # 提取并保存关节角
@@ -849,6 +914,8 @@ def main():
                        help='相机2（从相机）最大深度阈值（米），默认使用 --depth-max')
     parser.add_argument('--voxel-size', type=float,
                        help='体素下采样大小（米），None 表示不下采样')
+    parser.add_argument('--apply-icp', action='store_true',
+                       help='是否应用 ICP 算法精细化对齐点云')
     
     args = parser.parse_args()
     
@@ -886,7 +953,8 @@ def main():
                 joints_output_dir=args.joints_output,
                 calibration_path=args.calibration,
                 depth_threshold1=threshold1,
-                depth_threshold2=threshold2
+                depth_threshold2=threshold2,
+                apply_icp=args.apply_icp
             )
         
         else:  # args.mcap_dir
@@ -904,7 +972,8 @@ def main():
                         joints_output_dir=args.joints_output,
                         calibration_path=args.calibration,
                         depth_threshold1=threshold1,
-                        depth_threshold2=threshold2
+                        depth_threshold2=threshold2,
+                        apply_icp=args.apply_icp
                     )
                 except Exception as e:
                     print(f"\n处理 {mcap_file} 失败: {e}")
