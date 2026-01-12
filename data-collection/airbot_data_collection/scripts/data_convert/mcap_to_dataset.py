@@ -426,14 +426,9 @@ class RGBDToPointCloud:
         # 转换深度图单位（mm → m）
         depth_m = depth.astype(np.float32) * self.depth_scale
         
-<<<<<<< HEAD
-        # 深度过滤 - 将超出范围的深度设为0，Open3D在生成点云时会跳过
-        depth_m[(depth_m < self.depth_threshold[0]) | (depth_m > self.depth_threshold[1])] = 0
-=======
         # 深度过滤
         depth_m[depth_m < self.depth_threshold[0]] = 0
         depth_m[depth_m > self.depth_threshold[1]] = 0
->>>>>>> 842f090551c1a855de4251ebe3075d55c56c71e9
         
         # 创建RGBD图像对象
         rgb_o3d = o3d.geometry.Image(rgb)
@@ -457,16 +452,7 @@ class RGBDToPointCloud:
         )
         
         # 生成点云
-<<<<<<< HEAD
-        # 使用 depth_trunc 确保在生成时也考虑到阈值
-        pcd = o3d.geometry.PointCloud.create_from_rgbd_image(
-            rgbd, 
-            intrinsic,
-            depth_trunc=self.depth_threshold[1] + 0.1
-        )
-=======
         pcd = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd, intrinsic)
->>>>>>> 842f090551c1a855de4251ebe3075d55c56c71e9
         
         # 体素下采样
         if self.voxel_size:
@@ -840,13 +826,8 @@ def main():
                        help='深度值缩放因子（RealSense为0.001），默认: 0.001')
     parser.add_argument('--depth-min', type=float, default=0.1,
                        help='最小深度阈值（米），默认: 0.1')
-<<<<<<< HEAD
-    parser.add_argument('--depth-max', type=float, default=5.0,
-                       help='最大深度阈值（米），默认: 5.0')
-=======
     parser.add_argument('--depth-max', type=float, default=0.8,
                        help='最大深度阈值（米），默认: 0.8')
->>>>>>> 842f090551c1a855de4251ebe3075d55c56c71e9
     parser.add_argument('--voxel-size', type=float,
                        help='体素下采样大小（米），None 表示不下采样')
     
