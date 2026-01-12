@@ -318,10 +318,12 @@ class RGBDToPointCloud:
                 data_bytes = raw_img.DataAsNumpy().tobytes()
                 
                 # 根据编码解析
-                if '8UC3' in encoding or 'rgb8' in encoding or 'bgr8' in encoding:
+                if '8UC3' in encoding or 'rgb8' in encoding:
                     img = np.frombuffer(data_bytes, dtype=np.uint8).reshape(height, width, 3)
-                    # RealSense默认RGB格式
                     return img
+                elif 'bgr8' in encoding:
+                    img = np.frombuffer(data_bytes, dtype=np.uint8).reshape(height, width, 3)
+                    return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 elif '8UC1' in encoding or 'mono8' in encoding:
                     img = np.frombuffer(data_bytes, dtype=np.uint8).reshape(height, width)
                     return img
@@ -403,7 +405,8 @@ class RGBDToPointCloud:
         self,
         rgb: np.ndarray,
         depth: np.ndarray,
-        intrinsics: Dict
+        intrinsics: Dict,
+        depth_threshold: Optional[Tuple[float, float]] = None
     ) -> o3d.geometry.PointCloud:
         """
         将RGBD图像转换为点云
@@ -412,6 +415,7 @@ class RGBDToPointCloud:
             rgb: RGB图像 (H, W, 3) uint8
             depth: 深度图 (H, W) uint16，单位mm
             intrinsics: 相机内参 {'fx': ..., 'fy': ..., 'cx': ..., 'cy': ...}
+            depth_threshold: 有效深度范围 (min_m, max_m)，如果为None则使用初始化时的默认值
             
         Returns:
             Open3D点云对象
@@ -423,12 +427,14 @@ class RGBDToPointCloud:
         
         height, width = depth.shape
         
+        # 确定使用的阈值
+        threshold = depth_threshold if depth_threshold is not None else self.depth_threshold
+        
         # 转换深度图单位（mm → m）
         depth_m = depth.astype(np.float32) * self.depth_scale
         
-        # 深度过滤
-        depth_m[depth_m < self.depth_threshold[0]] = 0
-        depth_m[depth_m > self.depth_threshold[1]] = 0
+        # 深度过滤 - 将超出范围的深度设为0，Open3D在生成点云时会跳过
+        depth_m[(depth_m < threshold[0]) | (depth_m > threshold[1])] = 0
         
         # 创建RGBD图像对象
         rgb_o3d = o3d.geometry.Image(rgb)
@@ -437,7 +443,6 @@ class RGBDToPointCloud:
             rgb_o3d,
             depth_o3d,
             depth_scale=1.0,  # 已转换为米
-            depth_trunc=self.depth_threshold[1] + 1.0, # 设置截断距离，略大于过滤上限
             convert_rgb_to_intensity=False
         )
         
@@ -452,7 +457,12 @@ class RGBDToPointCloud:
         )
         
         # 生成点云
-        pcd = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd, intrinsic)
+        # 使用 depth_trunc 确保在生成时也考虑到阈值
+        pcd = o3d.geometry.PointCloud.create_from_rgbd_image(
+            rgbd, 
+            intrinsic,
+            depth_trunc=threshold[1] + 0.1
+        )
         
         # 体素下采样
         if self.voxel_size:
@@ -538,17 +548,12 @@ class RGBDToPointCloud:
             # 观察主题（优先）
             r'.*/observation/.*/joint_state/position$',
             r'.*/observation/.*/joint_state$',
-            # 示教/跟随时的主题 (Lead/Follow)
-            r'.*/follow/.*/joint_state/position$',
-            r'.*/lead/.*/joint_state/position$',
             # 标准主题
             r'^/[a-z_]+arm/joint_state/position$',
             r'^/eef/joint_state/position$',
             r'^/arm/joint_state/position$',
             # 动作主题（次优先）
             r'.*/action/.*/joint_state/position$',
-            # 兜底匹配：任何包含 joint_state/position 的主题
-            r'.*joint_state/position$',
         ]
         
         joint_data = {}  # {topic: [arrays]}
@@ -671,7 +676,8 @@ class RGBDToPointCloud:
         mcap_path: str,
         pointcloud_output_dir: str,
         joints_output_dir: str,
-        calibration_path: str
+        calibration_path: str,
+        depth_threshold2: Optional[Tuple[float, float]] = None
     ):
         """
         处理单个 MCAP 文件
@@ -681,6 +687,7 @@ class RGBDToPointCloud:
             pointcloud_output_dir: 点云输出目录
             joints_output_dir: 关节角输出目录
             calibration_path: 标定文件路径（必需）
+            depth_threshold2: 相机2的深度过滤范围。如果为None则使用默认值。
         """
         # 读取MCAP数据
         data = self.read_mcap_file(mcap_path)
@@ -698,8 +705,33 @@ class RGBDToPointCloud:
         if len(cameras) < 2:
             raise ValueError(f"需要双相机，但只找到 {len(cameras)} 个相机: {cameras}")
         
-        camera1 = cameras[0]
-        camera2 = cameras[1]
+        # 尝试通过序列号自动匹配标定文件中的相机角色
+        serial1_calib = str(calib_data['camera1'].get('serial_number', ''))
+        serial2_calib = str(calib_data['camera2'].get('serial_number', ''))
+        
+        camera1 = None  # 参考相机 (reference)
+        camera2 = None  # 次要相机 (secondary)
+        
+        print(f"  正在匹配相机角色...")
+        for name in cameras:
+            metadata = data['intrinsics'].get(name, {})
+            # 兼容 serial_number 或 serial 键名
+            sn = str(metadata.get('serial_number', metadata.get('serial', '')))
+            
+            if sn == serial1_calib:
+                camera1 = name
+                print(f"    - 相机 {name} 匹配为参考相机 (序列号: {sn})")
+            elif sn == serial2_calib:
+                camera2 = name
+                print(f"    - 相机 {name} 匹配为次要相机 (序列号: {sn})")
+        
+        # 如果无法通过序列号匹配，则使用字母顺序作为回退方案
+        if not camera1 or not camera2:
+            print(f"  ⚠ 无法通过序列号完全匹配相机，将退回到按名称排序模式")
+            camera1 = cameras[0]
+            camera2 = cameras[1]
+            print(f"    - 指定 {camera1} 为参考相机 (camera1)")
+            print(f"    - 指定 {camera2} 为次要相机 (camera2)")
         
         # 验证每个相机都有 RGB 和深度数据
         rgb1_list = [r for r in data['rgb'] if r['camera'] == camera1]
@@ -722,7 +754,13 @@ class RGBDToPointCloud:
         rgb2 = rgb2_list[0]['image']
         depth2 = depth2_list[0]['image']
         
-        # 获取相机内参 (优先使用标定文件中的内参)
+        # 预警：检查深度是否对齐
+        has_aligned_depth = any('aligned' in d['camera'] or 'aligned' in d.get('topic', '') for d in data['depth'])
+        # 注意：这里的 data['depth'] 里的 dict 结构没有 topic 字段，只有 camera。
+        # 但我们可以通过 topic 名来判断。
+        # 在 read_mcap_file 中我们提取了 camera_name。
+        
+        # 获取相机内参 (优先使用标定文件中的内参，它们是针对 Color 传感器的)
         intrinsics1 = calib_data.get('camera1', {}).get('intrinsics')
         intrinsics2 = calib_data.get('camera2', {}).get('intrinsics')
         
@@ -744,7 +782,7 @@ class RGBDToPointCloud:
         
         # 转换为点云
         pcd1 = self.rgbd_to_pointcloud(rgb1, depth1, intrinsics1)
-        pcd2 = self.rgbd_to_pointcloud(rgb2, depth2, intrinsics2)
+        pcd2 = self.rgbd_to_pointcloud(rgb2, depth2, intrinsics2, depth_threshold=depth_threshold2)
         
         print(f"  点云1 ({camera1}): {len(pcd1.points)} 点")
         print(f"  点云2 ({camera2}): {len(pcd2.points)} 点")
@@ -766,7 +804,7 @@ class RGBDToPointCloud:
         pointcloud_output_dir.mkdir(parents=True, exist_ok=True)
         mcap_name = Path(mcap_path).stem
         
-        pointcloud_file = pointcloud_output_dir / f"{mcap_name}_pcd.ply"
+        pointcloud_file = pointcloud_output_dir / f"{mcap_name}_fused.ply"
         self.save_pointcloud(fused_pcd, str(pointcloud_file))
         
         # 保存关节角
@@ -825,9 +863,13 @@ def main():
     parser.add_argument('--depth-scale', type=float, default=0.001,
                        help='深度值缩放因子（RealSense为0.001），默认: 0.001')
     parser.add_argument('--depth-min', type=float, default=0.1,
-                       help='最小深度阈值（米），默认: 0.1')
-    parser.add_argument('--depth-max', type=float, default=0.8,
-                       help='最大深度阈值（米），默认: 0.8')
+                       help='相机1最小深度阈值（米），默认: 0.1')
+    parser.add_argument('--depth-max', type=float, default=5.0,
+                       help='相机1最大深度阈值（米），默认: 5.0')
+    parser.add_argument('--depth-min2', type=float,
+                       help='相机2最小深度阈值（米），如果不指定则使用 --depth-min')
+    parser.add_argument('--depth-max2', type=float,
+                       help='相机2最大深度阈值（米），如果不指定则使用 --depth-max')
     parser.add_argument('--voxel-size', type=float,
                        help='体素下采样大小（米），None 表示不下采样')
     
@@ -847,6 +889,11 @@ def main():
         voxel_size=args.voxel_size
     )
     
+    # 准备相机2的阈值
+    depth_min2 = args.depth_min2 if args.depth_min2 is not None else args.depth_min
+    depth_max2 = args.depth_max2 if args.depth_max2 is not None else args.depth_max
+    depth_threshold2 = (depth_min2, depth_max2)
+
     try:
         # 处理文件
         if args.mcap:
@@ -855,7 +902,8 @@ def main():
                 mcap_path=args.mcap,
                 pointcloud_output_dir=args.pointcloud_output,
                 joints_output_dir=args.joints_output,
-                calibration_path=args.calibration
+                calibration_path=args.calibration,
+                depth_threshold2=depth_threshold2
             )
         
         else:  # args.mcap_dir
@@ -871,7 +919,8 @@ def main():
                         mcap_path=str(mcap_file),
                         pointcloud_output_dir=args.pointcloud_output,
                         joints_output_dir=args.joints_output,
-                        calibration_path=args.calibration
+                        calibration_path=args.calibration,
+                        depth_threshold2=depth_threshold2
                     )
                 except Exception as e:
                     print(f"\n处理 {mcap_file} 失败: {e}")
