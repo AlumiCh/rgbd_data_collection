@@ -8,7 +8,7 @@
 3. 保存标定结果到YAML文件
 
 使用方法：
-    python calibrate_dual_cameras.py --serial1 123456789 --serial2 987654321 --board-size 9 6 --square-size 0.025
+    python calibrate_dual_cameras.py --serial1 250122073394 --serial2 243522071790 --board-size 9 6 --square-size 0.025
 
 日期：2026-01-04
 """
@@ -150,7 +150,7 @@ class DualCameraCalibrator:
         
         print("  ✓ 相机初始化完成")
     
-    def capture_images(self, min_pairs: int = 15):
+    def capture_images(self, min_pairs: int = 30):
         """
         交互式采集标定图像
         
@@ -161,7 +161,7 @@ class DualCameraCalibrator:
         print("\n操作说明：")
         print("  - 将棋盘格放置在两个相机都能看到的位置")
         print("  - 按 SPACE 键：采集当前图像对")
-        print("  - 按 Q 键：完成采集（需至少采集15对图像）")
+        print("  - 按 Q 键：完成采集（需至少采集30对图像）")
         print("  - 按 ESC 键：退出程序")
         print("\n提示：")
         print("  1. 从不同角度、不同距离采集棋盘格图像")
@@ -252,8 +252,9 @@ class DualCameraCalibrator:
                     corners1_refined = cv2.cornerSubPix(gray1, corners1, (11, 11), (-1, -1), criteria)
                     corners2_refined = cv2.cornerSubPix(gray2, corners2, (11, 11), (-1, -1), criteria)
                     
-                    self.camera1_images.append(image1)
-                    self.camera2_images.append(image2)
+                    # 关键修改：必须使用 .copy()，否则会占满 RealSense 内部缓冲池导致程序卡死
+                    self.camera1_images.append(image1.copy())
+                    self.camera2_images.append(image2.copy())
                     self.camera1_corners.append(corners1_refined)
                     self.camera2_corners.append(corners2_refined)
                     
@@ -458,9 +459,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用示例:
-  python calibrate_dual_cameras.py --serial1 123456789 --serial2 987654321
-  python calibrate_dual_cameras.py --serial1 123456789 --serial2 987654321 --board-size 9 6 --square-size 0.025
-  python calibrate_dual_cameras.py --serial1 123456789 --serial2 987654321 --output my_calibration.yaml
+  python calibrate_dual_cameras.py --serial1 250122073394 --serial2 243522071790
+  python calibrate_dual_cameras.py --serial1 250122073394 --serial2 243522071790 --board-size 9 6 --square-size 0.025
+  python calibrate_dual_cameras.py --serial1 250122073394 --serial2 243522071790 --output my_calibration.yaml
 
 注意事项:
   1. 准备一个标准的棋盘格标定板（黑白相间）
@@ -479,10 +480,10 @@ def main():
                        help='棋盘格内角点数量 (列数 行数)，默认: 9 6')
     parser.add_argument('--square-size', type=float, default=0.025,
                        help='棋盘格方格边长（米），默认: 0.025 (25mm)')
-    parser.add_argument('--min-pairs', type=int, default=15,
-                       help='最少采集的图像对数量，默认: 15')
-    parser.add_argument('--output', type=str, default='dual_camera_calibration.yaml',
-                       help='输出文件路径，默认: dual_camera_calibration.yaml')
+    parser.add_argument('--min-pairs', type=int, default=30,
+                       help='最少采集的图像对数量，默认: 30')
+    parser.add_argument('--output', type=str, default='scripts/dual_camera_calibration.yaml',
+                       help='输出文件路径，默认: scripts/dual_camera_calibration.yaml')
     parser.add_argument('--width', type=int, default=640,
                        help='图像宽度，默认: 640')
     parser.add_argument('--height', type=int, default=480,
