@@ -36,6 +36,10 @@
 | `--voxel-size` | `None` | 体素下采样尺寸(米)。推荐 `0.005` (5mm) 以显著减小文件体积。 |
 | `--depth-min` | `0.1` | 相机最小有效深度(米)。小于此距离的点将被过滤。 |
 | `--depth-max` | `5.0` | 相机最大有效深度(米)。大于此距离的点将被过滤。 |
+| `--depth-min-cam1` | `0.1` | 主相机最小有效深度(米)。小于此距离的点将被过滤。 |
+| `--depth-max-cam1` | `5.0` | 主相机最大有效深度(米)。大于此距离的点将被过滤。 |
+| `--depth-min-cam2` | `0.1` | 侧相机最小有效深度(米)。小于此距离的点将被过滤。 |
+| `--depth-max-cam2` | `5.0` | 侧相机最大有效深度(米)。大于此距离的点将被过滤。 |
 | `--depth-scale` | `0.001` | 深度图单位换算因子 (RealSense默认毫米，通常无需修改)。 |
 
 ---
@@ -49,6 +53,8 @@ python scripts/data_convert/mcap_to_dataset.py \
   --calibration /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/scripts/dual_camera_calibration.yaml \
   --pointcloud-output /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/data/data/test_20260110_03_pcd \
   --joints-output /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/data/data/test_20260110_03_joints \
+  --depth-min-cam1 0.1 --depth-max-cam1 0.8 \
+  --depth-min-cam2 0.1 --depth-max-cam2 0.8
 ```
 
 ### 场景B: 制作训练集 (批量+下采样)
@@ -61,6 +67,8 @@ python scripts/data_convert/mcap_to_dataset.py \
   --pointcloud-output /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/data/data/test_20260110_03_pcd \
   --joints-output /home/jojo/airbot/airbot-data-5.1.6.8a3/data-collection/airbot_data_collection/data/data/test_20260110_03_joints \
   --voxel-size 0.005 \
+  --depth-min-cam1 0.1 --depth-max-cam1 0.8 \
+  --depth-min-cam2 0.1 --depth-max-cam2 0.8
 ```
 
 ---
