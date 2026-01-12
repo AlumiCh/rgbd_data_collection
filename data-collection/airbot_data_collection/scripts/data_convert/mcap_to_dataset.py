@@ -427,7 +427,8 @@ class RGBDToPointCloud:
         depth_m = depth.astype(np.float32) * self.depth_scale
         
         # 深度过滤
-        valid_mask = (depth_m >= self.depth_threshold[0]) & (depth_m <= self.depth_threshold[1])
+        depth_m[depth_m < self.depth_threshold[0]] = 0
+        depth_m[depth_m > self.depth_threshold[1]] = 0
         
         # 创建RGBD图像对象
         rgb_o3d = o3d.geometry.Image(rgb)
@@ -436,6 +437,7 @@ class RGBDToPointCloud:
             rgb_o3d,
             depth_o3d,
             depth_scale=1.0,  # 已转换为米
+            depth_trunc=self.depth_threshold[1] + 1.0, # 设置截断距离，略大于过滤上限
             convert_rgb_to_intensity=False
         )
         
@@ -451,17 +453,6 @@ class RGBDToPointCloud:
         
         # 生成点云
         pcd = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd, intrinsic)
-        
-        # 应用有效性掩码过滤
-        points = np.asarray(pcd.points)
-        colors = np.asarray(pcd.colors)
-        
-        valid_indices = valid_mask.flatten()
-        filtered_points = points[valid_indices]
-        filtered_colors = colors[valid_indices]
-        
-        pcd.points = o3d.utility.Vector3dVector(filtered_points)
-        pcd.colors = o3d.utility.Vector3dVector(filtered_colors)
         
         # 体素下采样
         if self.voxel_size:
@@ -547,12 +538,17 @@ class RGBDToPointCloud:
             # 观察主题（优先）
             r'.*/observation/.*/joint_state/position$',
             r'.*/observation/.*/joint_state$',
+            # 示教/跟随时的主题 (Lead/Follow)
+            r'.*/follow/.*/joint_state/position$',
+            r'.*/lead/.*/joint_state/position$',
             # 标准主题
             r'^/[a-z_]+arm/joint_state/position$',
             r'^/eef/joint_state/position$',
             r'^/arm/joint_state/position$',
             # 动作主题（次优先）
             r'.*/action/.*/joint_state/position$',
+            # 兜底匹配：任何包含 joint_state/position 的主题
+            r'.*joint_state/position$',
         ]
         
         joint_data = {}  # {topic: [arrays]}
@@ -770,7 +766,7 @@ class RGBDToPointCloud:
         pointcloud_output_dir.mkdir(parents=True, exist_ok=True)
         mcap_name = Path(mcap_path).stem
         
-        pointcloud_file = pointcloud_output_dir / f"{mcap_name}_fused.ply"
+        pointcloud_file = pointcloud_output_dir / f"{mcap_name}_pcd.ply"
         self.save_pointcloud(fused_pcd, str(pointcloud_file))
         
         # 保存关节角
@@ -830,8 +826,8 @@ def main():
                        help='深度值缩放因子（RealSense为0.001），默认: 0.001')
     parser.add_argument('--depth-min', type=float, default=0.1,
                        help='最小深度阈值（米），默认: 0.1')
-    parser.add_argument('--depth-max', type=float, default=5.0,
-                       help='最大深度阈值（米），默认: 5.0')
+    parser.add_argument('--depth-max', type=float, default=0.8,
+                       help='最大深度阈值（米），默认: 0.8')
     parser.add_argument('--voxel-size', type=float,
                        help='体素下采样大小（米），None 表示不下采样')
     
